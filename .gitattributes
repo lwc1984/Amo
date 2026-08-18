@@ -1,0 +1,10 @@
+# cmd.exe 的 ^ 续行符在 LF 行尾下解析失败，构建会静默损坏。
+# core.autocrlf 是 per-clone 设置，仓库带不走，只能在这里强制。
+*.bat text eol=crlf
+
+# 其余文本统一 LF，避免 Windows 上无意引入 CRLF
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.ino text eol=lf

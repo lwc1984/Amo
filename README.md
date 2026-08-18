@@ -17,8 +17,8 @@ python server.py
 netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow protocol=TCP localport=8787
 ```
 
-然后 `ipconfig` 看局域网 IP —— 光拿这个 IP 打开页面是看不到数据的，`/api/*`
-全部要令牌，见下方「配对设备」一节。
+然后 `ipconfig` 看局域网 IP —— 光拿这个 IP 打开页面是看不到数据的：除 `/api/pair`
+外，`/api/*` 都要令牌，见下方「配对设备」一节。
 
 ## 3. 接上 Claude Code
 
@@ -34,7 +34,8 @@ netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow pr
 ## 配对设备
 
 服务首次启动会在 `%APPDATA%\AgentDashboard\config.json` 生成一个令牌。
-`/api/*` 全部需要它，所以直接打开 `http://<IP>:8787` 是看不到数据的。
+除 `/api/pair` 外，`/api/*` 都需要它，所以直接打开 `http://<IP>:8787` 是看不到数据的；
+`/api/pair` 只在配对窗口开启的 60 秒内响应，不需要令牌。
 
 - **平板**：托盘菜单点「复制平板地址」，粘到平板浏览器打开一次即可，令牌会存进 localStorage
 - **ESP32**：托盘菜单点「配对新设备（60 秒）」，然后长按板子上的 GPIO21 三秒
@@ -44,8 +45,10 @@ netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow pr
 
 ## 4. 平板端
 
-打开页面后点一次右上角 **开启提醒**。这一次点击做三件事：解锁音频（浏览器要求用户手势）、
-申请通知权限、申请 Wake Lock。
+打开页面后点一次右上角 **叫醒我**（点过之后按钮变成 **盯着呢**）。这一次点击做三件事：
+解锁音频（浏览器要求用户手势）、申请通知权限、申请 Wake Lock。**顶部的注意力条和标题闪烁
+不受这次点击影响** —— 只要有会话进入等待状态就会亮，不用先点按钮；点按钮解锁的是声音、
+震动和系统通知这三样。
 
 **关于熄屏**：`http://192.168.x.x` 不是 secure context，`navigator.wakeLock` 和
 `Notification` 在上面直接不可用，页面会静默降级（只剩声音+震动+视觉）。两个解法选一个：
