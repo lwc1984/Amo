@@ -11,6 +11,9 @@ from PIL import Image, ImageDraw
 import pystray
 
 import server                      # 复用 server.py 的 app / snapshot
+import phrases
+import metrics
+import sessions
 
 PORT = server.PORT
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -54,6 +57,21 @@ def local_ip() -> str:
         s.close()
 
 
+def tablet_url(ip: str, port: int, token: str) -> str:
+    return f"http://{ip}:{port}/?k={token}"
+
+
+def overall_state(ss: list) -> str:
+    """整盘状态：等待 > 失联 > 运行 > 空闲 > 无。"""
+    if any(s["state"] == "waiting" for s in ss):
+        return "waiting"
+    if any(s["state"] == "stale" for s in ss):
+        return "stale"
+    if any(s["state"] == "running" for s in ss):
+        return "running"
+    return "idle" if ss else "off"
+
+
 # ── 开机自启 ─────────────────────────────────────────────────
 def autostart_on() -> bool:
     try:
@@ -77,30 +95,21 @@ def watch(icon: pystray.Icon):
     last_waiting = 0
     while icon.visible or True:
         try:
-            ss = server.snapshot()["sessions"]
+            ss = sessions.snapshot(metrics.current())["sessions"]
         except Exception:
             ss = []
 
         waiting = [s for s in ss if s["state"] == "waiting"]
-        if waiting:
-            state = "waiting"
-        elif any(s["state"] == "stale" for s in ss):
-            state = "stale"
-        elif any(s["state"] == "running" for s in ss):
-            state = "running"
-        elif ss:
-            state = "idle"
-        else:
-            state = "off"
+        state = overall_state(ss)
 
         icon.icon = make_icon(state)
-        icon.title = (f"需要你处理: {waiting[0]['name']}" if waiting
-                      else f"{len(ss)} 个会话 · {state}")
+        icon.title = (f"{phrases.STATE_LABEL['waiting']}：{waiting[0]['name']}" if waiting
+                      else f"{len(ss)} 个会话 · {phrases.STATE_LABEL_SHORT.get(state, state)}")
 
-        # 只在"从无到有"时弹一次气泡，不重复骚扰
         if len(waiting) > last_waiting:
             try:
-                icon.notify(waiting[0].get("detail", "等待你的操作"), "需要你处理")
+                icon.notify(waiting[0].get("detail", phrases.WAITING_DEFAULT),
+                            phrases.STATE_LABEL["waiting"])
             except Exception:
                 pass
         last_waiting = len(waiting)
@@ -113,6 +122,8 @@ def main():
         webbrowser.open(f"http://localhost:{PORT}")
         return
 
+    metrics.start_collector()
+
     import uvicorn
     threading.Thread(
         target=lambda: uvicorn.run(server.app, host="0.0.0.0", port=PORT,
@@ -122,14 +133,25 @@ def main():
     icon = pystray.Icon(
         APP_NAME, make_icon("off"), "Agent 控制台",
         menu=pystray.Menu(
-            pystray.MenuItem("打开控制台", lambda: webbrowser.open(f"http://localhost:{PORT}"),
+            pystray.MenuItem("打开控制台",
+                             lambda: webbrowser.open(f"http://localhost:{PORT}"),
                              default=True),
-            pystray.MenuItem(lambda i: f"平板地址  {local_ip()}:{PORT}",
-                             lambda: copy(f"http://{local_ip()}:{PORT}")),
+            pystray.MenuItem(lambda i: f"复制平板地址  {local_ip()}:{PORT}",
+                             lambda: copy(tablet_url(local_ip(), PORT, server.CFG.token))),
+            pystray.MenuItem("配对新设备（60 秒）",
+                             lambda: server.PAIRING.open(seconds=60)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("开机自启", toggle_autostart, checked=lambda i: autostart_on()),
             pystray.MenuItem("退出", lambda i: i.stop()),
         ))
+
+    def on_pair(peer: str):
+        try:
+            icon.notify(f"{peer}", phrases.PAIRED_BALLOON)
+        except Exception:
+            pass
+
+    server.PAIRING.on_pair = on_pair
 
     threading.Thread(target=watch, args=(icon,), daemon=True).start()
     icon.run()
