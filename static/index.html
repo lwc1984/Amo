@@ -112,6 +112,7 @@ if (urlKey) {
 const TOKEN = localStorage.getItem(KEY_NAME);
 
 const $ = s => document.querySelector(s);
+const TITLE = 'Agent 控制台';
 let armed = false, audio = null, wakeLock = null, alerting = false, blinker = null;
 
 /* ── 提醒：声音 + 震动 + 标题闪烁 + 系统通知 ── */
@@ -140,16 +141,20 @@ function beep(freq = 660, dur = .18) {
 function startAlert(names) {
   if (alerting) return;
   alerting = true;
+
+  // 视觉：不需要用户手势，任何时候都该生效 —— 这条横线是整个设计的核心
   document.body.classList.add('alert');
+  blinker = setInterval(() => {
+    document.title = document.title.startsWith('⚠') ? TITLE : '⚠ 该你了';
+  }, 900);
+
+  // 以下三样浏览器都要求先有用户手势，只能等点过"叫醒我"
+  if (!armed) return;
   beep(740, .16); setTimeout(() => beep(988, .22), 200);
   navigator.vibrate?.([180, 90, 180, 90, 300]);
   if (window.Notification?.permission === 'granted') {
-    new Notification('哥们儿，该你了', { body: names.join('、'), tag: 'agent-wait', renotify: true });
+    new Notification(LABEL.waiting, { body: names.join('、'), tag: 'agent-wait', renotify: true });
   }
-  const base = document.title;
-  blinker = setInterval(() => {
-    document.title = document.title.startsWith('⚠') ? base : '⚠ 该你了';
-  }, 900);
 }
 
 function stopAlert() {
@@ -157,7 +162,7 @@ function stopAlert() {
   alerting = false;
   document.body.classList.remove('alert');
   clearInterval(blinker);
-  document.title = 'Agent 控制台';
+  document.title = TITLE;
 }
 
 /* ── 阻止熄屏 ── */
@@ -220,18 +225,26 @@ function renderSessions(list) {
     </div>`).join('');
 
   const waiting = list.filter(s => s.state === 'waiting');
-  if (waiting.length && armed) startAlert(waiting.map(s => s.name));
-  else if (!waiting.length) stopAlert();
+  if (waiting.length) startAlert(waiting.map(s => s.name));
+  else stopAlert();
 }
 
 const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
 /* ── SSE ── */
+function showUnpaired(msg) {
+  stopAlert();
+  $('#conn').className = 'off';
+  $('#conn').textContent = '未配对';
+  $('#list').innerHTML = '';
+  $('#count').textContent = '0';
+  $('#empty').hidden = false;
+  $('#empty').textContent = msg;
+}
+
 function connect() {
   if (!TOKEN) {
-    $('#conn').textContent = '未配对';
-    $('#empty').hidden = false;
-    $('#empty').textContent = '还没配对。在宿主机托盘里点『配对新设备』，然后从那儿复制地址过来。';
+    showUnpaired('还没配对。在宿主机托盘里点『配对新设备』，然后从那儿复制地址过来。');
     return;
   }
   const es = new EventSource('/api/stream?k=' + encodeURIComponent(TOKEN));
@@ -242,8 +255,20 @@ function connect() {
     renderSessions(d.sessions);
   };
   es.onerror = () => {
-    $('#conn').className = 'off'; $('#conn').textContent = '断了，正重连';
-    es.close(); setTimeout(connect, 3000);
+    es.close();
+    $('#conn').className = 'off';
+    $('#conn').textContent = '断了，正重连';
+    // EventSource 看不到状态码，401 和"服务器挂了"长得一样。探一下才知道该不该重连。
+    fetch('/api/tiny?k=' + encodeURIComponent(TOKEN))
+      .then(r => {
+        if (r.status === 401) {
+          localStorage.removeItem(KEY_NAME);   // 废令牌留着只会下次继续 401
+          showUnpaired('令牌失效了。去宿主机托盘重新点『配对新设备』，再把地址复制过来。');
+          return;
+        }
+        setTimeout(connect, 3000);
+      })
+      .catch(() => setTimeout(connect, 3000));  // 网络问题，正常重连
   };
 }
 connect();
