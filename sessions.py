@@ -14,6 +14,7 @@ import phrases
 
 HOST = socket.gethostname()
 IDLE_TIMEOUT = 90
+ARG_MAX = 60          # detail 里工具参数的显示上限，超出截断
 SESSIONS: dict[str, dict] = {}
 
 _ORDER = {"waiting": 0, "running": 1, "idle": 2, "stale": 3}
@@ -100,11 +101,17 @@ def apply_event(event: str, payload: dict, now: float | None = None) -> dict | N
 
 
 def detail(s: dict, full: bool = True) -> str:
-    """detail 是"当前在干嘛"，不是摘要。full=False 时脱敏到工具名。"""
+    """detail 是"当前在干嘛"，不是摘要。full=False 时脱敏到工具名。
+
+    参数要压成一行并截断：一条多行的 PowerShell 脚本会把卡片撑爆，
+    而这一行的用途只是"它卡在哪个命令上"，不是把命令原样重放。
+    """
     tool = s.get("tool") or ""
     if not tool:
         return s.get("phrase", "")
-    arg = s.get("arg") or ""
+    arg = " ".join((s.get("arg") or "").split())
+    if len(arg) > ARG_MAX:
+        arg = arg[:ARG_MAX] + "…"
     return f"{tool}: {arg}" if (full and arg) else tool
 
 

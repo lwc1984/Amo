@@ -145,3 +145,28 @@ def test_snapshot_carries_host_and_full_detail():
     assert snap["host"] == sessions.HOST
     assert snap["metrics"] == {"cpu": 12}
     assert snap["sessions"][0]["detail"] == "Bash: ls -la"
+
+
+def test_detail_collapses_newlines_in_arg():
+    """多行脚本会把卡片撑爆，参数必须压成一行。"""
+    s = ev("tool", tool_name="PowerShell",
+           tool_input={"command": 'Set-Location "D:/x"\n$t = 1\n"done"'})
+    assert "\n" not in sessions.detail(s, full=True)
+    assert sessions.detail(s, full=True) == 'PowerShell: Set-Location "D:/x" $t = 1 "done"'
+
+
+def test_detail_truncates_long_arg():
+    s = ev("tool", tool_name="Bash", tool_input={"command": "x" * 200})
+    out = sessions.detail(s, full=True)
+    assert out.endswith("…")
+    assert len(out) == len("Bash: ") + sessions.ARG_MAX + 1
+
+
+def test_detail_short_arg_is_not_truncated():
+    s = ev("tool", tool_name="Bash", tool_input={"command": "git status"})
+    assert sessions.detail(s, full=True) == "Bash: git status"
+
+
+def test_redacted_detail_unaffected_by_truncation():
+    s = ev("tool", tool_name="Bash", tool_input={"command": "x" * 200})
+    assert sessions.detail(s, full=False) == "Bash"
