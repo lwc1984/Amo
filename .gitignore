@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.spec
+managed_components/
+sdkconfig
+sdkconfig.old
+amo-display/build/
+.superpowers/

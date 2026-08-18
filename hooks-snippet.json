@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/session-start", "timeout": 5 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/prompt", "timeout": 5 }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "", "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/tool", "timeout": 5 }] }
+    ],
+    "Notification": [
+      { "matcher": "permission_prompt",
+        "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/notify?k=permission", "timeout": 5 }] },
+      { "matcher": "idle_prompt",
+        "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/notify?k=idle", "timeout": 5 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/stop", "timeout": 5 }] }
+    ],
+    "SessionEnd": [
+      { "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/session-end", "timeout": 5 }] }
+    ]
+  }
+}
