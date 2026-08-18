@@ -34,3 +34,39 @@ def test_tray_empty_label_is_chinese():
     import phrases
     assert phrases.TRAY_EMPTY
     assert not phrases.TRAY_EMPTY.isascii()
+
+
+# ── 配对窗口的可见反馈 ────────────────────────────────────────
+# 点了「配对新设备」屏幕上什么都不发生，是这一组测试要防的缺陷。
+
+def test_pairing_label_when_closed_invites():
+    import phrases
+    import security
+    w = security.PairingWindow()
+    assert tray.pairing_label(w, now=1000.0) == phrases.PAIRING_MENU
+
+
+def test_pairing_label_when_open_shows_remaining():
+    """窗口开着时菜单要显示还剩多久 —— 否则用户无从判断自己是否还来得及。"""
+    import phrases
+    import security
+    w = security.PairingWindow()
+    w.open(seconds=60, now=1000.0)
+
+    assert tray.pairing_label(w, now=1000.0) == f"{phrases.PAIRING_OPEN}  剩 60 秒"
+    assert tray.pairing_label(w, now=1045.0) == f"{phrases.PAIRING_OPEN}  剩 15 秒"
+
+
+def test_pairing_label_reverts_after_expiry():
+    import phrases
+    import security
+    w = security.PairingWindow()
+    w.open(seconds=60, now=1000.0)
+    assert tray.pairing_label(w, now=1061.0) == phrases.PAIRING_MENU
+
+
+def test_pairing_label_never_shows_negative():
+    import security
+    w = security.PairingWindow()
+    w.open(seconds=60, now=1000.0)
+    assert "剩 0 秒" in tray.pairing_label(w, now=1059.9)

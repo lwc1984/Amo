@@ -74,6 +74,32 @@ def overall_state(ss: list) -> str:
     return "idle" if ss else "off"
 
 
+def pairing_label(window, now: float | None = None) -> str:
+    """配对菜单项的文字。窗口开着时显示剩余秒数。
+
+    pystray 只在展开菜单的那一刻重算这个 lambda，所以倒计时不会自己跳；
+    但你再展开一次看到的一定是当前状态。即时反馈靠点击时弹的气泡。
+    """
+    now = time.time() if now is None else now
+    if window.is_open(now):
+        left = max(0, int(window.until - now))
+        return f"{phrases.PAIRING_OPEN}  剩 {left} 秒"
+    return phrases.PAIRING_MENU
+
+
+def open_pairing(icon, item):
+    """开配对窗口，并立刻弹气泡。
+
+    在此之前这个菜单项只是把内存里一个时间戳往后推 60 秒然后返回 None，
+    屏幕上不会有任何变化 —— 用户没法区分"点中了"和"功能坏了"。
+    """
+    server.PAIRING.open(seconds=60)
+    try:
+        icon.notify(phrases.PAIRING_OPENED, phrases.PAIRING_MENU)
+    except Exception:
+        pass
+
+
 # ── 开机自启 ─────────────────────────────────────────────────
 def autostart_on() -> bool:
     try:
@@ -107,6 +133,8 @@ def watch(icon: pystray.Icon):
         icon.icon = make_icon(state)
         if waiting:
             icon.title = f"{phrases.STATE_LABEL['waiting']}：{waiting[0]['name']}"
+        elif server.PAIRING.is_open():
+            icon.title = pairing_label(server.PAIRING)
         elif ss:
             icon.title = f"{len(ss)} 个会话 · {phrases.STATE_LABEL_SHORT.get(state, '')}"
         else:
@@ -149,8 +177,8 @@ def main():
                              default=True),
             pystray.MenuItem(lambda i: f"复制平板地址  {local_ip()}:{PORT}",
                              lambda: copy(tablet_url(local_ip(), PORT, server.CFG.token))),
-            pystray.MenuItem("配对新设备（60 秒）",
-                             lambda: server.PAIRING.open(seconds=60)),
+            pystray.MenuItem(lambda i: pairing_label(server.PAIRING),
+                             open_pairing),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("开机自启", toggle_autostart, checked=lambda i: autostart_on()),
             pystray.MenuItem("退出", lambda i: i.stop()),
