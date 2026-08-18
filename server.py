@@ -97,5 +97,16 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 if __name__ == "__main__":
     import uvicorn
 
+    import discovery
+
     metrics.start_collector()
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
+    handle = None
+    try:
+        handle = discovery.register(PORT, CFG.host_id, sessions.HOST)
+    except Exception as e:                  # 没网 / 端口占用都不该拦住主服务
+        print(f"mDNS 广播启动失败，设备得手填地址: {e}")
+    try:
+        uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
+    finally:
+        if handle:
+            discovery.unregister(handle)
