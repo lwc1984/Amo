@@ -5,13 +5,18 @@
 # 下载来源：https://github.com/adobe-fonts/source-han-sans/releases
 # 许可证全文：https://github.com/adobe-fonts/source-han-sans/blob/release/LICENSE.txt
 #
-# C 盘空间紧张（实测常年 <100MB 可用），npm 默认缓存在
-# %LOCALAPPDATA%\npm-cache（C 盘）会导致 npx 安装失败，
-# 所以这里强制把缓存重定向到 D 盘再跑。
 $ErrorActionPreference = "Stop"
 
-$env:npm_config_cache = "D:\Lvwenchao\geek\npm-cache"
-New-Item -ItemType Directory -Force -Path $env:npm_config_cache | Out-Null
+# npm 默认把缓存放在 %LOCALAPPDATA%（通常在系统盘）。本机系统盘曾只剩 16MB，
+# 会让 npx 直接失败。所以：系统盘不足 1GB 时才改道到仓库旁边，否则用默认值 ——
+# 硬编码到某个开发者的具体盘符/目录会让脚本在别的机器、别的 clone 上直接炸掉。
+$sysDriveLetter = $env:SystemDrive.Substring(0, 1)
+$freeGB = (Get-PSDrive -Name $sysDriveLetter).Free / 1GB
+if ($freeGB -lt 1) {
+    $env:npm_config_cache = Join-Path $PSScriptRoot "..\..\.npm-cache"
+    New-Item -ItemType Directory -Force -Path $env:npm_config_cache | Out-Null
+    Write-Host ("系统盘仅剩 {0:N2} GB，npm 缓存改道到 {1}" -f $freeGB, $env:npm_config_cache)
+}
 
 $fontDir = Join-Path $PSScriptRoot "..\components\agent_ui\fonts"
 $ttf = Join-Path $PSScriptRoot "SourceHanSansSC-Regular.otf"
@@ -35,6 +40,14 @@ $statusChars = "该你了干着呢摸鱼中没声儿连不上配对了找着还"
 # gb2312_level1.txt，一行一个字，UTF-8 无 BOM）。
 $gb2312Level1Path = Join-Path $PSScriptRoot "gb2312_level1.txt"
 $cjkSymbols = (Get-Content -Raw -Encoding UTF8 $gb2312Level1Path) -replace "\s", ""
+
+# 缺字兜底占位符。LVGL 对 cmap 里没有的码点什么都不画（没有方框、没有日志），
+# 会话名里的繁体字/生僻姓氏/emoji 会变成一段看不见的空隙。规范的替换字符是
+# U+FFFD，但思源黑体 SC 没有这个字形（用 fontTools 的 getBestCmap() 核实过）；
+# 用 U+25A1（□ 白方块）代替 —— 思源黑体 SC 有这个字形。UI 层的实际替换逻辑
+# 不在本脚本范围内，这里只保证字库里有一个能渲染出来的占位符可用。
+$fallbackGlyph = [char]0x25A1
+$cjkSymbols = $cjkSymbols + $fallbackGlyph
 $asciiRange = "0x20-0x7F"
 
 Write-Host "生成 font_status_28（状态词专用，小字符集大字号）..."

@@ -10,4 +10,5 @@ sdkconfig.old
 amo-display/build/
 amo-display/tools/*.otf
 amo-display/tools/*.ttf
+.npm-cache/
 .superpowers/
