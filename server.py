@@ -72,8 +72,10 @@ async def stream():
 @app.get("/api/tiny", response_class=PlainTextResponse,
          dependencies=[Depends(require_token)])
 async def tiny_endpoint(d: str = ""):
+    """d=full 给完整参数，d=tool 强制脱敏；不带 d 时按 config 的 tiny_detail 决定。"""
     snap = sessions.snapshot(metrics.current())
-    return tiny.render_tiny(snap, full=(d == "full" or CFG.tiny_detail == "full"))
+    full = (d == "full") if d else (CFG.tiny_detail == "full")
+    return tiny.render_tiny(snap, full=full)
 
 
 @app.post("/api/pair")

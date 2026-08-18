@@ -90,6 +90,24 @@ def test_tiny_full_flag_gives_arguments(client, tok):
     assert full == "Amo\tBash: git push origin main"
 
 
+def test_tiny_query_can_force_redaction_over_config(client, tok, monkeypatch):
+    """配置设成 full 时，调用方仍能用 ?d=tool 要求脱敏。"""
+    monkeypatch.setattr(server.CFG, "tiny_detail", "full")
+    hook(client, "tool", cwd="D:/proj/Amo",
+         tool_name="Bash", tool_input={"command": "git push origin main"})
+
+    assert client.get(f"/api/tiny?k={tok}&d=tool").text.split("\n")[1] == "Amo\tBash"
+
+
+def test_tiny_config_full_applies_when_no_query(client, tok, monkeypatch):
+    monkeypatch.setattr(server.CFG, "tiny_detail", "full")
+    hook(client, "tool", cwd="D:/proj/Amo",
+         tool_name="Bash", tool_input={"command": "git push origin main"})
+
+    line2 = client.get(f"/api/tiny?k={tok}").text.split("\n")[1]
+    assert line2 == "Amo\tBash: git push origin main"
+
+
 # ---- 配对 ----
 
 def test_pair_closed_by_default_is_403(client):
