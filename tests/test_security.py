@@ -50,9 +50,23 @@ def test_pairing_window_can_be_closed_early():
 def test_record_fires_callback_with_peer():
     seen = []
     w = security.PairingWindow(on_pair=seen.append)
-    w.record("192.168.1.77")
+    w.open(seconds=60, now=1000.0)
+
+    assert w.record("192.168.1.77", now=1000.0) is True
     assert seen == ["192.168.1.77"]
 
 
+def test_record_outside_window_does_not_fire():
+    """窗口没开时既不回调也不返回真 —— 纵深防御的第二层。"""
+    seen = []
+    w = security.PairingWindow(on_pair=seen.append)
+
+    assert w.record("192.168.1.77", now=1000.0) is False
+    assert seen == []
+
+
 def test_record_without_callback_does_not_raise():
-    security.PairingWindow().record("192.168.1.77")
+    w = security.PairingWindow()
+    w.open(seconds=60, now=1000.0)
+
+    assert w.record("192.168.1.77", now=1000.0) is True

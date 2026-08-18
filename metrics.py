@@ -7,6 +7,7 @@ import os
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 import psutil
 
@@ -32,11 +33,20 @@ def current() -> dict:
 
 
 def _sample(prev_net, prev_t: float, now: float, counters) -> dict:
-    dt = max(now - prev_t, 0.001)
+    """时钟没走时返回 0，而不是把字节差外推成一个虚假尖峰。"""
+    dt = now - prev_t
+    if dt <= 0:
+        return {"net_up": 0, "net_down": 0}
     return {
         "net_up": round((counters.bytes_sent - prev_net.bytes_sent) / dt),
         "net_down": round((counters.bytes_recv - prev_net.bytes_recv) / dt),
     }
+
+
+def _disk_root() -> str:
+    """系统盘根目录。优先 SystemDrive，缺失时退回用户目录所在盘，不写死 C:。"""
+    drive = os.environ.get("SystemDrive")
+    return str(Path(drive + "\\")) if drive else Path.home().anchor
 
 
 def _read_gpu():
@@ -63,7 +73,7 @@ def _collect_loop():
         prev_net, prev_t = counters, now
 
         mem = psutil.virtual_memory().percent
-        disk = psutil.disk_usage(os.environ.get("SystemDrive", "C:") + "\\").percent
+        disk = psutil.disk_usage(_disk_root()).percent
         gpu, vram = _read_gpu()
 
         hist["cpu"].append(cpu)

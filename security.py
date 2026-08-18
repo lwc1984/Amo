@@ -40,6 +40,14 @@ class PairingWindow:
     def close(self) -> None:
         self.until = 0.0
 
-    def record(self, peer: str) -> None:
+    def record(self, peer: str, now: float | None = None) -> bool:
+        """记录一次配对。窗口没开就什么都不做并返回 False。
+
+        调用方（server.py 的 /api/pair）仍会自己先检查 is_open() 并返回 403；
+        这里是纵深防御的第二层，不把安全边界完全托付给调用方。
+        """
+        if not self.is_open(now):
+            return False
         if self.on_pair:
             self.on_pair(peer)
+        return True
