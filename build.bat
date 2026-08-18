@@ -1,18 +1,19 @@
 @echo off
-pip install pyinstaller pystray pillow fastapi "uvicorn[standard]" psutil nvidia-ml-py
+pip install -r requirements-dev.txt
 
 pyinstaller --noconfirm --clean ^
   --name AgentDashboard ^
-  --onefile ^
+  --onedir ^
   --noconsole ^
   --add-data "static;static" ^
   --collect-all uvicorn ^
   --collect-all fastapi ^
   --collect-all starlette ^
+  --collect-all zeroconf ^
   --collect-all pynvml ^
   --hidden-import psutil ^
   tray.py
 
 echo.
-echo 产物: dist\AgentDashboard.exe
+echo 产物: dist\AgentDashboard\AgentDashboard.exe
 pause

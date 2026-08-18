@@ -3,7 +3,7 @@
 ## 1. 装依赖并启动
 
 ```powershell
-pip install fastapi "uvicorn[standard]" psutil nvidia-ml-py
+pip install -r requirements.txt
 python server.py
 ```
 
@@ -17,7 +17,8 @@ python server.py
 netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow protocol=TCP localport=8787
 ```
 
-然后 `ipconfig` 看局域网 IP，平板浏览器打开 `http://<IP>:8787`。
+然后 `ipconfig` 看局域网 IP —— 光拿这个 IP 打开页面是看不到数据的，`/api/*`
+全部要令牌，见下方「配对设备」一节。
 
 ## 3. 接上 Claude Code
 
@@ -29,6 +30,17 @@ netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow pr
 **服务没启动时 hook 会失败但不会阻断 Claude Code** —— 这里只用了 `PostToolUse` / `Stop` /
 `Notification` 这类事后事件，即使返回错误也无法回滚已发生的动作。刻意没用 `PreToolUse`，
 避免仪表盘挂掉时拖慢或干扰工具调用。
+
+## 配对设备
+
+服务首次启动会在 `%APPDATA%\AgentDashboard\config.json` 生成一个令牌。
+`/api/*` 全部需要它，所以直接打开 `http://<IP>:8787` 是看不到数据的。
+
+- **平板**：托盘菜单点「复制平板地址」，粘到平板浏览器打开一次即可，令牌会存进 localStorage
+- **ESP32**：托盘菜单点「配对新设备（60 秒）」，然后长按板子上的 GPIO21 三秒
+
+`/hook/*` 只接受本机来源，所以 `hooks-snippet.json` 里的地址必须是 `127.0.0.1`，
+换成局域网 IP 会被 403。
 
 ## 4. 平板端
 
@@ -46,6 +58,7 @@ netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow pr
 
 - **手机兜底推送**：在 `hook()` 的 `waiting` 分支里加一行 POST 到 ntfy.sh / Bark，
   人不在平板前也能收到。
-- **多机汇总**：`SESSIONS` 的 key 换成 `f"{hostname}:{session_id}"`，多台机器指向同一个服务。
+- **多机场景不是汇总，是各跑各的**：每台宿主机各自起一个服务、各自广播 mDNS，
+  平板 / ESP32 分别去配对想看的那几台，不做单一服务聚合多机数据。
 - **其他 Agent**：`/hook/{event}` 这套协议是自定义的，别的 Agent 只要能发 webhook
   就能复用同一套 UI，不用改前端。
