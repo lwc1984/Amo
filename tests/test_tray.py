@@ -28,3 +28,9 @@ def test_colors_match_spec():
     assert tray.COLORS["waiting"] == (255, 176, 32)     # #FFB020
     assert tray.COLORS["running"] == (63, 191, 216)     # #3FBFD8
     assert tray.COLORS["stale"] == (226, 86, 74)        # #E2564A
+
+
+def test_tray_empty_label_is_chinese():
+    import phrases
+    assert phrases.TRAY_EMPTY
+    assert not phrases.TRAY_EMPTY.isascii()

@@ -219,7 +219,7 @@ function renderSessions(list) {
           <span class="name">${esc(s.name)}</span>
           <span class="tag">${LABEL[s.state] || s.state}</span>
         </div>
-        <div class="detail">${esc(s.detail || s.summary || '—')}</div>
+        <div class="detail">${esc(s.detail || '—')}</div>
         <div class="path">${esc(s.host || '')} · ${esc(s.cwd || '')}</div>
       </div>
     </div>`).join('');

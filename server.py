@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 import config
 import metrics
+import phrases
 import security
 import sessions
 import tiny
@@ -23,6 +24,47 @@ CFG = config.load_config()
 PAIRING = security.PairingWindow()
 
 
+def _notify_pair(peer: str) -> None:
+    """默认的配对通知：打到控制台。托盘会用气泡覆盖它。"""
+    print(f"{phrases.PAIRED_BALLOON}: {peer}")
+
+
+PAIRING.on_pair = _notify_pair
+
+
+def start_background():
+    """两个入口点共用的后台启动，返回 mDNS 广播句柄（失败时为 None）。
+
+    以前 mDNS 只在 server.py 的 __main__ 里起、配对窗口只有托盘菜单能开，
+    结果打包出的 exe 能配对但不广播、python server.py 能广播但永远配不了对。
+    两边都走这里，就不会再分裂成两个半成品。
+    """
+    import threading
+    import time
+
+    import discovery
+
+    metrics.start_collector()
+
+    bc = discovery.Broadcast(PORT, CFG.host_id, sessions.HOST)
+    try:
+        bc.start()
+    except Exception as e:                  # 没网 / 端口占用都不该拦住主服务
+        print(f"mDNS 广播启动失败，设备得手填地址: {e}")
+
+    def _follow_ip():
+        """宿主 IP 变了就重新广播 —— 这正是当初选 mDNS 的理由。"""
+        while True:
+            time.sleep(30)
+            try:
+                bc.refresh()
+            except Exception as e:
+                print(f"mDNS 重新广播失败: {e}")
+
+    threading.Thread(target=_follow_ip, daemon=True).start()
+    return bc
+
+
 def resource_path(rel: str) -> Path:
     """PyInstaller 打包后资源解压在 sys._MEIPASS，源码运行时就是脚本目录。"""
     return Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / rel
@@ -30,7 +72,7 @@ def resource_path(rel: str) -> Path:
 
 STATIC = resource_path("static")
 
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 
 async def require_token(request: Request) -> None:
@@ -46,12 +88,16 @@ async def require_loopback(request: Request) -> None:
 
 
 @app.post("/hook/{event}", dependencies=[Depends(require_loopback)])
-async def hook(event: str, request: Request):
+async def hook(event: str, request: Request, kind: str = ""):
     """Claude Code 的 http hook 全部打到这里。必须快速返回 200。"""
     try:
         payload = await request.json()
     except Exception:
         payload = {}
+    # matcher 类型从查询参数来：Notification 的 payload 里不一定带得上，
+    # 而 permission_prompt / idle_prompt 的区分是告警不变成狼来了的前提。
+    if kind and not payload.get("notification_type"):
+        payload["notification_type"] = kind
     sessions.apply_event(event, payload)
     return {}
 
@@ -86,6 +132,13 @@ async def pair(request: Request):
     return {"token": CFG.token, "host_id": CFG.host_id, "host": sessions.HOST}
 
 
+@app.post("/api/pair/open", dependencies=[Depends(require_loopback)])
+async def pair_open():
+    """给没有托盘的运行方式开配对窗口。只接受本机来源，和 /hook/* 同一信任级别。"""
+    PAIRING.open(seconds=60)
+    return {"open": True, "seconds": 60}
+
+
 @app.get("/")
 async def index():
     return FileResponse(STATIC / "index.html")
@@ -95,32 +148,9 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 if __name__ == "__main__":
-    import threading
-    import time
-
     import uvicorn
 
-    import discovery
-
-    metrics.start_collector()
-
-    bc = discovery.Broadcast(PORT, CFG.host_id, sessions.HOST)
-    try:
-        bc.start()
-    except Exception as e:              # 没网 / 端口占用都不该拦住主服务
-        print(f"mDNS 广播启动失败，设备得手填地址: {e}")
-
-    def _follow_ip():
-        """宿主 IP 变了就重新广播 —— 这正是当初选 mDNS 的理由。"""
-        while True:
-            time.sleep(30)
-            try:
-                bc.refresh()
-            except Exception as e:
-                print(f"mDNS 重新广播失败: {e}")
-
-    threading.Thread(target=_follow_ip, daemon=True).start()
-
+    bc = start_background()
     try:
         uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
     finally:

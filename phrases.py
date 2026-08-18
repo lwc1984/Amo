@@ -26,6 +26,7 @@ WAITING_DEFAULT = "等你点头"
 IDLE_DEFAULT = "等你下一句"
 
 EMPTY_LIST = "一个会话都没有。随便找个项目敲 claude 就出来了。"
+TRAY_EMPTY = "没有会话"
 CONN_ON = "连上了"
 CONN_OFF = "断了，正重连"
 ARM_BUTTON = "叫醒我"

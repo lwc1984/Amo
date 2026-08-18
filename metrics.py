@@ -66,23 +66,26 @@ def _collect_loop():
     hist = {k: deque(maxlen=HISTORY) for k in ("cpu", "mem", "gpu", "net")}
 
     while True:
-        cpu = psutil.cpu_percent(interval=1.0)      # 这一句就是节拍
-        now = time.time()
-        counters = psutil.net_io_counters()
-        rates = _sample(prev_net, prev_t, now, counters)
-        prev_net, prev_t = counters, now
+        try:
+            cpu = psutil.cpu_percent(interval=1.0)      # 这一句就是节拍
+            now = time.time()
+            counters = psutil.net_io_counters()
+            rates = _sample(prev_net, prev_t, now, counters)
+            prev_net, prev_t = counters, now
 
-        mem = psutil.virtual_memory().percent
-        disk = psutil.disk_usage(_disk_root()).percent
-        gpu, vram = _read_gpu()
+            mem = psutil.virtual_memory().percent
+            disk = psutil.disk_usage(_disk_root()).percent
+            gpu, vram = _read_gpu()
 
-        hist["cpu"].append(cpu)
-        hist["mem"].append(mem)
-        hist["gpu"].append(gpu or 0)
-        hist["net"].append(round((rates["net_up"] + rates["net_down"]) / 1024))
+            hist["cpu"].append(cpu)
+            hist["mem"].append(mem)
+            hist["gpu"].append(gpu or 0)
+            hist["net"].append(round((rates["net_up"] + rates["net_down"]) / 1024))
 
-        _metrics.update(cpu=cpu, mem=mem, disk=disk, gpu=gpu, vram=vram,
-                        hist={k: list(v) for k, v in hist.items()}, **rates)
+            _metrics.update(cpu=cpu, mem=mem, disk=disk, gpu=gpu, vram=vram,
+                            hist={k: list(v) for k, v in hist.items()}, **rates)
+        except Exception:
+            time.sleep(1)     # 一次异常不该永久杀死采集线程
 
 
 def start_collector() -> None:

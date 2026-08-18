@@ -11,9 +11,9 @@
     ],
     "Notification": [
       { "matcher": "permission_prompt",
-        "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/notify?k=permission", "timeout": 5 }] },
+        "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/notify?kind=permission", "timeout": 5 }] },
       { "matcher": "idle_prompt",
-        "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/notify?k=idle", "timeout": 5 }] }
+        "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/notify?kind=idle", "timeout": 5 }] }
     ],
     "Stop": [
       { "hooks": [{ "type": "http", "url": "http://127.0.0.1:8787/hook/stop", "timeout": 5 }] }

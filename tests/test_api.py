@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -130,3 +133,83 @@ def test_pair_after_close_is_403_again(client):
     server.PAIRING.open(seconds=60)
     server.PAIRING.close()
     assert client.post("/api/pair").status_code == 403
+
+
+# ---- 新增：流 / 回环 / 配对开窗 / 通知回调 / 脱敏端到端 / hook kind ----
+
+def test_stream_generator_yields_a_valid_frame(client, tok):
+    """/api/stream 的生成器此前从没被任何测试执行过。
+    经 TestClient 流式读会挂在无限循环上，所以直接驱动生成器取第一帧。"""
+    hook(client, "session-start", cwd="D:/proj/Amo")
+
+    async def first_frame():
+        resp = await server.stream()
+        return await resp.body_iterator.__anext__()
+
+    frame = asyncio.run(first_frame())
+
+    assert frame.startswith("data: ")
+    assert frame.endswith("\n\n")
+    snap = json.loads(frame[6:].strip())
+    assert snap["host"] == server.sessions.HOST
+    assert snap["sessions"][0]["name"] == "Amo"
+
+
+def test_hook_from_real_lan_address_is_403():
+    """用真实的非回环客户端地址，而不是 monkeypatch —— 后者对着一个
+    信任可伪造请求头的实现同样会通过。"""
+    lan = TestClient(server.app, client=("192.168.1.55", 5000))
+    assert lan.post("/hook/prompt", json={"session_id": "s1"}).status_code == 403
+
+
+def test_pair_open_is_loopback_only():
+    lan = TestClient(server.app, client=("192.168.1.55", 5000))
+    assert lan.post("/api/pair/open").status_code == 403
+
+
+def test_pair_open_then_pair_succeeds(client, tok):
+    server.PAIRING.close()
+    assert client.post("/api/pair").status_code == 403
+    assert client.post("/api/pair/open").status_code == 200
+    try:
+        r = client.post("/api/pair")
+        assert r.status_code == 200
+        assert r.json()["token"] == tok
+        assert r.json()["host"] == server.sessions.HOST
+    finally:
+        server.PAIRING.close()
+
+
+def test_pair_fires_on_pair_callback(client, monkeypatch):
+    """有人趁窗口偷配时，宿主必须收到通知 —— 这是该机制唯一的安全网。"""
+    seen = []
+    monkeypatch.setattr(server.PAIRING, "on_pair", seen.append)
+    server.PAIRING.open(seconds=60)
+    try:
+        client.post("/api/pair")
+        assert len(seen) == 1
+    finally:
+        server.PAIRING.close()
+
+
+def test_tiny_never_leaks_cwd_end_to_end(client, tok):
+    """保证是"cwd 字段不下发"，不是"任何路径都不出现" ——
+    d=full 本来就会给出工具参数，参数里可能自带路径。"""
+    hook(client, "tool", cwd="D:/secret/plan",
+         tool_name="Bash", tool_input={"command": "echo hi"})
+
+    redacted = client.get(f"/api/tiny?k={tok}").text
+    full = client.get(f"/api/tiny?k={tok}&d=full").text
+
+    assert "D:/secret" not in redacted
+    assert "D:/secret" not in full          # cwd 任何模式下都不下发
+    assert "echo hi" not in redacted        # 默认脱敏到工具名
+    assert "echo hi" in full                # d=full 才给参数
+
+
+def test_hook_kind_query_sets_notification_type(client, tok):
+    """hooks-snippet 用 ?kind= 传 matcher 类型，服务端必须真的读它。"""
+    hook(client, "session-start", cwd="D:/proj/Amo")
+    client.post("/hook/notify?kind=permission",
+                json={"session_id": "s1", "cwd": "D:/proj/Amo", "message": "OK"})
+    assert client.get(f"/api/tiny?k={tok}").text.split("\n")[0].startswith("1|1,0,0|")

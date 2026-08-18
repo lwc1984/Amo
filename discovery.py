@@ -20,6 +20,8 @@ def local_ip() -> str:
     try:
         s.connect(("223.5.5.5", 80))
         return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"        # 没网时别让托盘菜单渲染崩掉
     finally:
         s.close()
 

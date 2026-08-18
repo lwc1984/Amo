@@ -53,6 +53,8 @@ def local_ip() -> str:
     try:
         s.connect(("223.5.5.5", 80))
         return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"        # 没网时别让托盘菜单渲染崩掉
     finally:
         s.close()
 
@@ -92,8 +94,8 @@ def toggle_autostart(icon, item):
 
 # ── 托盘状态刷新 ─────────────────────────────────────────────
 def watch(icon: pystray.Icon):
-    last_waiting = 0
-    while icon.visible or True:
+    last_waiting_ids = set()
+    while True:
         try:
             ss = sessions.snapshot(metrics.current())["sessions"]
         except Exception:
@@ -103,26 +105,35 @@ def watch(icon: pystray.Icon):
         state = overall_state(ss)
 
         icon.icon = make_icon(state)
-        icon.title = (f"{phrases.STATE_LABEL['waiting']}：{waiting[0]['name']}" if waiting
-                      else f"{len(ss)} 个会话 · {phrases.STATE_LABEL_SHORT.get(state, state)}")
+        if waiting:
+            icon.title = f"{phrases.STATE_LABEL['waiting']}：{waiting[0]['name']}"
+        elif ss:
+            icon.title = f"{len(ss)} 个会话 · {phrases.STATE_LABEL_SHORT.get(state, '')}"
+        else:
+            icon.title = phrases.TRAY_EMPTY
 
-        if len(waiting) > last_waiting:
+        # 按会话身份判断，不按数量 —— 一个处理完、另一个进来时数量不变，
+        # 用计数比较会把第二个的提醒静默吞掉。
+        ids = {s["id"] for s in waiting}
+        fresh = ids - last_waiting_ids
+        if fresh:
+            first = next(s for s in waiting if s["id"] in fresh)
             try:
-                icon.notify(waiting[0].get("detail", phrases.WAITING_DEFAULT),
+                icon.notify(first.get("detail", phrases.WAITING_DEFAULT),
                             phrases.STATE_LABEL["waiting"])
             except Exception:
                 pass
-        last_waiting = len(waiting)
+        last_waiting_ids = ids
 
         time.sleep(1.5)
 
 
 def main():
     if already_running():
-        webbrowser.open(f"http://localhost:{PORT}")
+        webbrowser.open(tablet_url("localhost", PORT, server.CFG.token))
         return
 
-    metrics.start_collector()
+    bc = server.start_background()
 
     import uvicorn
     threading.Thread(
@@ -134,7 +145,7 @@ def main():
         APP_NAME, make_icon("off"), "Agent 控制台",
         menu=pystray.Menu(
             pystray.MenuItem("打开控制台",
-                             lambda: webbrowser.open(f"http://localhost:{PORT}"),
+                             lambda: webbrowser.open(tablet_url("localhost", PORT, server.CFG.token)),
                              default=True),
             pystray.MenuItem(lambda i: f"复制平板地址  {local_ip()}:{PORT}",
                              lambda: copy(tablet_url(local_ip(), PORT, server.CFG.token))),
@@ -154,7 +165,10 @@ def main():
     server.PAIRING.on_pair = on_pair
 
     threading.Thread(target=watch, args=(icon,), daemon=True).start()
-    icon.run()
+    try:
+        icon.run()
+    finally:
+        bc.stop()
 
 
 def copy(text: str):
