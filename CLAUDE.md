@@ -4,150 +4,158 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A local monitoring dashboard for Claude Code sessions. A FastAPI server on the Windows host
-receives Claude Code HTTP hooks, folds them into per-session state, and streams that state
-(plus system metrics) over SSE to four display surfaces: a browser dashboard (tablet), a
-Windows tray icon, an ESP32 AMOLED desk display, and (planned) a phone push.
+A local monitoring dashboard for Claude Code sessions. A FastAPI service on the Windows host
+receives Claude Code hooks, folds them into per-session state, and serves that state to a
+tablet page, a Windows tray icon, and (planned) an ESP32 AMOLED desk display.
+
+Each host runs its own service. A device sees only the hosts it has paired with, so a
+colleague's machine on the same LAN is discoverable but unreadable.
 
 All UI text and comments are Chinese. Match that when editing.
 
 ## Commands
 
 ```powershell
-pip install fastapi "uvicorn[standard]" psutil nvidia-ml-py   # server only
-python server.py                                              # 0.0.0.0:8787
+pip install -r requirements-dev.txt     # 含 pytest / httpx / httpx2 / pyinstaller
 
-pip install pystray pillow                                    # + tray host
-python tray.py                                                # tray icon, embeds server
-
-build.bat                                                     # -> dist\AgentDashboard.exe
+python -m pytest tests/ -v              # 100 tests
+python server.py                        # 0.0.0.0:8787，无托盘
+python tray.py                          # 托盘 + 同一个服务，日常用这个
+build.bat                               # -> dist\AgentDashboard\AgentDashboard.exe
 ```
 
-No tests, no linter. `agent_display.ino` is built in PlatformIO with
-`board = lilygo-t-display-amoled-lite` and the LilyGo-AMOLED-Series library (bundles LVGL 8.x).
+`tray.py` is the packaged entry point and a strict superset of `server.py`.
+
+Firmware: `agent_display.ino` is the pre-rewrite skeleton and **does not work against the
+current server** — it polls `/api/tiny` without a token and its `BUZZER_PIN 2` collides with
+this board's I2C SCL. It is replaced wholesale by the ESP32 plan (see Roadmap).
 
 ## Architecture
 
-**Event flow.** `hooks-snippet.json` maps Claude Code events to `POST /hook/{event}` on
-`127.0.0.1:8787`. `server.py:hook()` keys everything on `session_id` into the in-memory
-`SESSIONS` dict and collapses each event into one of four states:
+`server.py` is a thin assembly layer. The logic lives in seven focused modules, all of which
+take an injectable `now` where time matters so the state machine is testable without sleeping.
+
+| Module | Responsibility |
+|---|---|
+| `config.py` | Token + `host_id`, persisted to `%APPDATA%\AgentDashboard\config.json` |
+| `phrases.py` | All Chinese copy — the single source of truth for every surface |
+| `sessions.py` | `SESSIONS` state machine, transcript summary, redaction, `snapshot()` |
+| `metrics.py` | System metrics collector thread |
+| `security.py` | Token compare, loopback check, the 60-second pairing window |
+| `tiny.py` | The three-line plain-text payload the ESP32 polls |
+| `discovery.py` | `Broadcast` — mDNS registration that follows the host's IP |
+
+**Never name a module `copy.py`** — it shadows the standard library.
+
+### Endpoints
+
+| Route | Auth | Origin | Notes |
+|---|---|---|---|
+| `GET /`, `/static/*` | none | any | Page shell; carries no session data |
+| `GET /api/stream` | token | any | SSE, one frame/second, full detail |
+| `GET /api/tiny` | token | any | Three lines; `?d=full` / `?d=tool` overrides config |
+| `POST /api/pair` | none | any | Returns the token **only** inside the 60s window |
+| `POST /api/pair/open` | none | loopback | Opens the window without a tray |
+| `POST /hook/{event}` | none | loopback | `?kind=` supplies the Notification matcher |
+
+`docs_url` / `redoc_url` / `openapi_url` are disabled deliberately — they sat outside the
+spec's endpoint matrix and handed a LAN scanner the route map.
+
+### Event flow
+
+`hooks-snippet.json` maps Claude Code events to `POST /hook/{event}` on `127.0.0.1:8787`.
+`sessions.apply_event` collapses each into one of four states:
 
 | event | state | detail |
 |---|---|---|
-| `session-start` | idle | fixed string |
-| `prompt` | running | "正在思考" |
-| `tool` | running | tool name + first of `command`/`file_path`/`pattern` |
-| `notify` | waiting (permission) / idle | hook `message` |
-| `stop` | idle | last assistant text scraped from the transcript |
+| `session-start` | idle | fixed phrase |
+| `prompt` | running | fixed phrase |
+| `tool` | running | `tool` + first of `command`/`file_path`/`pattern` |
+| `notify` (permission) | **waiting** | hook `message` |
+| `notify` (idle) | idle | hook `message` |
+| `stop` | idle | transcript-tail summary |
 | `session-end` | — | session removed |
 
-Only post-hoc hook events are wired up. `PreToolUse` is deliberately absent: it is blockable,
-so a hung dashboard would slow Claude Code itself. The accepted cost is that during a tool
-call the display shows the *previous* tool for a few seconds. Hook handlers must return 200
-fast — never add blocking work to `hook()`.
+Only post-hoc events are wired. `PreToolUse` is deliberately absent: it is blockable, so a
+hung dashboard would slow the thing it monitors. The cost is that during a tool call the
+display shows the previous tool for a few seconds. Hook handlers must return 200 fast.
 
-**Metrics.** A daemon thread (`_collect_loop`) writes into the module-global `_metrics`.
-Its tick is `psutil.cpu_percent(interval=1.0)` — that blocking call *is* the loop timer,
-so don't replace it with a non-blocking variant plus `sleep`. NVML is optional; a machine
-with no NVIDIA GPU silently yields `None` and clients render `—` (intended behavior).
-CPU temperature was explicitly dropped from scope: `psutil` can't read it on Windows and
-LibreHardwareMonitor wasn't worth the dependency.
+`tool` and `arg` are stored **separately**, never pre-joined. Redaction is selective
+re-joining, not after-the-fact regex — that is what lets `/api/tiny` emit a tool name with no
+arguments and never emit `cwd` at all.
 
-**Fan-out.** `snapshot()` is the single source of truth: it marks `running` sessions older
-than `IDLE_TIMEOUT` (90s) as `stale`, sorts waiting→running→idle→stale, and returns
-`{metrics, sessions, ts}`. `GET /api/stream` pushes it as SSE once a second; `tray.py`
-calls `snapshot()` directly in-process rather than over HTTP. The sort order is load-bearing
-for `/api/tiny`, which just takes the first entry.
+`snapshot()` is the single sorting authority: waiting → running → idle → stale, with
+`running` sessions older than `IDLE_TIMEOUT` (90s) marked `stale`. `tiny.render_tiny` takes
+`ss[0]` and relies on that; it does not re-sort, because two sort implementations would drift.
 
-**Tray host.** `tray.py` imports `server` and runs uvicorn in a thread, so it is a superset
-of `python server.py`. Single-instance detection is a bind attempt on port 8787 — if taken,
-it opens the browser and exits. Autostart is an HKCU `...\Run` value; the icon is drawn at
-runtime with PIL, so there is no `.ico` to package.
+### Trust model
 
-## Design rules (fixed across all surfaces — don't break these)
+The token gates data; pairing distributes the token. Both entry points call
+`server.start_background()`, which starts the metrics collector, the mDNS broadcast, and a
+30-second thread that re-registers when the host's egress IP changes.
 
-These were decided deliberately; changing one requires changing it everywhere.
+- Pairing: tray menu (or `POST /api/pair/open`) opens a 60-second window; each success fires
+  `PAIRING.on_pair` — a console line by default, a tray balloon when the tray is running.
+- mDNS TXT carries only `v` / `host` / `id`. Never add session data to it.
+- Explicitly **not** defended (documented in the spec, don't "fix" silently): a stolen paired
+  device, passive sniffing of plaintext HTTP, and other local processes reading the config.
 
-- **Color encodes state, never category.** run `#3FBFD8` / wait `#FFB020` / idle `#4A5B78`
-  / stale `#E2564A`. Duplicated in `tray.py:COLORS`, the CSS vars in `index.html`, and the
-  `C_RUN`/`C_WAIT` defines in `agent_display.ino`. Amber means "it's waiting on you" on
-  every screen, so a user never re-learns the language.
-- **`waiting` is the only state allowed to shout.** Everything else stays quiet. If running
-  also blinked, waiting would stop being noticeable. `permission_prompt` (needs approval,
-  alarm) and `idle_prompt` (finished, grey) must stay separated — merging them turns the
-  alert into crying wolf.
-- **The top color bar is the core of the design**, not decoration: 6px full-width on the
-  web page, 3px on the ESP32. It is meant to be read with peripheral vision from 2m away.
-- **`detail` is "what it is doing right now", not a summary.** Only after `Stop` does it
-  become transcript-scraped summary text.
-- **Disconnection must never render as normal.** Web shows 断开重连中, ESP32 shows a slow
-  blue `NO LINK`, `snapshot()` marks sessions `stale`. A monitor that hides its own failure
-  is worse than no monitor.
-- **Alert on transition, not on state.** The ESP32 buzzer and the tray balloon fire once
-  when entering `waiting`, never repeatedly while it persists.
+## Design rules (fixed across all surfaces)
 
-**ESP32 specifics.** Brightness is a design element, not a setting: idle 20/255 (AMOLED
-black pixels draw ~no power, so it reads as a black glass tile at night), running 60,
-waiting 255 + breathing. Lit area — not icon detail — encodes state, because at 194px wide
-icons are unreadable from across the room. `shift_task` nudges the screen 1px/minute
-against burn-in.
+Changing one requires changing it everywhere.
 
-## Known gaps
+- **Colour encodes state, never category.** run `#3FBFD8` / wait `#FFB020` / idle `#4A5B78`
+  / stale `#E2564A`, duplicated in `tray.py:COLORS`, `static/index.html` CSS vars, and the
+  firmware. Amber means "waiting on you" on every screen.
+- **`waiting` is the only state allowed to shout.** If running also blinked, waiting would
+  stop being noticeable. `permission_prompt` and `idle_prompt` must stay distinct — merging
+  them turns the alert into crying wolf.
+- **The top 6px bar is the core of the design**, meant to be read from 2m. It is deliberately
+  *not* gated on the 叫醒我 click; only sound, vibration, and system notifications are, since
+  those are what browsers require a gesture for.
+- **Alert on transition, not on state.** The tray compares waiting-session **identities**, not
+  counts — a count comparison silently swallows the alert when one session resolves as
+  another arrives.
+- **`detail` is "what it's doing now"**, not a summary. Only `Stop` swaps in summary text.
+- **Disconnection must never render as normal.** 断了，正重连 / stale / the firmware's slow
+  blue `NO LINK`.
 
-- `server.py` serves `static/index.html` and mounts `StaticFiles(directory=BASE/"static")`,
-  but `index.html` sits at the repo root and no `static/` directory exists — the server
-  fails to start as checked in. Intended fix (designed but never applied): create `static/`,
-  move `index.html` into it, and add the PyInstaller-aware resolver, since `--noconsole`
-  builds unpack resources to `sys._MEIPASS`:
-
-  ```python
-  def resource_path(rel: str) -> Path:
-      return Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / rel
-  STATIC = resource_path("static")   # replaces BASE / "static"
-  ```
-
-- `agent_display.ino` polls `GET /api/tiny`, which `server.py` does not implement. Designed
-  shape — plain text, no JSON, so the MCU parses with one `sscanf` plus an `indexOf('\t')`:
-
-  ```python
-  @app.get("/api/tiny", response_class=PlainTextResponse)
-  async def tiny():
-      """waiting,running,idle|会话名\tdetail"""
-      ss = snapshot()["sessions"]
-      n = lambda st: sum(1 for s in ss if s["state"] == st)
-      top = next((s for s in ss if s["state"] in ("waiting", "running")), None)
-      return (f'{n("waiting")},{n("running")},{n("idle")}|'
-              + (f'{top["name"]}\t{top.get("detail","")[:40]}' if top else ""))
-  ```
-
-- A landscape ESP32 layout (368×194, two sessions visible at once, metrics filling the
-  idle-state right half) was designed but not implemented. It is a `setRotation(1)` plus a
-  coordinate rewrite inside `set_state()`; the state machine and polling need no changes.
-- Phone fallback push (ntfy.sh / Bark) — the fourth surface — is planned, not built. It
-  belongs in the `waiting` branch of `hook()`.
+Browser copy is duplicated in `static/index.html` because JS cannot import `phrases.py`;
+`tests/test_page_copy.py` is the only thing preventing drift. Keep it passing.
 
 ## Gotchas
 
-- `--noconsole` makes `sys.stdout` `None` and uvicorn's default logging config crashes on
-  it. The `log_config=None, access_log=False` in `tray.py:main()` exists for that — keep it.
-- uvicorn imports `uvicorn.loops.*` / `uvicorn.protocols.*` dynamically, invisible to
-  PyInstaller's static analysis. Use `--collect-all uvicorn`, not individual
-  `--hidden-import` lines.
-- `nvidia-ml-py` is the package name, `pynvml` the import name. It binds `nvml.dll` from the
-  GPU driver, not from the wheel.
-- LVGL font sizes must be enabled individually in `lv_conf.h` (`LV_FONT_MONTSERRAT_48 1`);
-  only 14 is compiled by default. An `undefined reference` on a font is config, not code.
-- Chinese glyphs on the ESP32 need a subset font built with `lv_font_conv` — never the full
-  CJK set. The current firmware sidesteps this by using English state words.
-- The `--onefile` build unpacks to `%TEMP%` on every launch (2-3s cold start, occasional AV
-  false positives). `--onedir` is the better tradeoff for something that starts once a day.
-- Firewall: allow TCP 8787 on the **private** profile, or the tablet cannot connect.
-- `http://192.168.x.x` is not a secure context, so `navigator.wakeLock` and `Notification`
-  are simply absent; `index.html` degrades silently to sound + vibration + visuals. Fix it
-  on the device (tablet developer options → stay awake) or with an `mkcert` LAN cert.
+- `psutil.cpu_percent(interval=1.0)` **is** the collector's clock. Don't replace it with a
+  non-blocking call plus `sleep`.
+- `--noconsole` makes `sys.stdout` `None`; uvicorn's default logging config crashes on it.
+  `log_config=None, access_log=False` in `tray.py` exists for that.
+- uvicorn/zeroconf import dynamically — use `--collect-all`, not individual `--hidden-import`.
+- `nvidia-ml-py` is the package, `pynvml` the import. `nvmlInit()` runs at import time, so a
+  GPU-present code path cannot be unit-tested without restructuring.
+- `starlette` 1.6 wants `httpx2` for `TestClient`; both `httpx` and `httpx2` are dev deps.
+  Removing `httpx2` brings back a deprecation warning — it is not a typo.
+- `TestClient` defaults `client` to `("testclient", 50000)`, which is **not** loopback and
+  will 403 every `/hook/*` call. Pass `client=("127.0.0.1", 50000)`. Never widen
+  `security.LOOPBACK` to satisfy a test harness.
+- `.gitattributes` forces `*.bat text eol=crlf`. `cmd.exe` cannot parse `^` continuations
+  with LF endings and fails in a way that looks like a corrupted command, not a line-ending
+  problem. `core.autocrlf` is per-clone and cannot be relied on.
+- `http://192.168.x.x` is not a secure context, so `wakeLock` and `Notification` are absent;
+  the page degrades silently. Fix on the device or with an `mkcert` LAN cert.
 
-## Extension notes
+## Known gaps
 
-- Multi-host: key `SESSIONS` by `f"{hostname}:{session_id}"`.
-- `/hook/{event}` is a private protocol — any agent that can send webhooks reuses the whole
-  UI unchanged.
+- `watch()` in `tray.py` has no automated test — it is coupled to real `sessions`/`metrics`/
+  `time.sleep`. The identity-based balloon fix was verified by review only.
+- The tray's five GUI behaviours (icon, tooltip, balloon, menu actions, autostart) have never
+  been observed running; they need an interactive desktop.
+- `metrics._collect_loop` catches exceptions per iteration, but a wedged `psutil` would still
+  serve a stale sample with no staleness indicator on the page.
+
+## Roadmap
+
+`docs/superpowers/specs/2026-08-18-agent-dashboard-design.md` is the design authority.
+`docs/superpowers/plans/2026-08-18-host-dashboard.md` is this (completed) plan. The ESP32
+firmware is a separate plan, not yet written; it depends on `/api/tiny` and `/api/pair`,
+targets T-Display-AMOLED-Lite (SH8501B0, 194×368, landscape 368×194), and must be built
+against `LilyGo-Display-IDF`, which wants ESP-IDF 5.3.
