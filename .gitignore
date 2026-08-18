@@ -8,4 +8,6 @@ managed_components/
 sdkconfig
 sdkconfig.old
 amo-display/build/
+amo-display/tools/*.otf
+amo-display/tools/*.ttf
 .superpowers/
