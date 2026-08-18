@@ -1,3 +1,5 @@
+import pytest
+
 import discovery
 
 
@@ -29,3 +31,50 @@ def test_local_ip_is_v4_dotted():
     parts = ip.split(".")
     assert len(parts) == 4
     assert all(p.isdigit() for p in parts)
+
+
+def test_refresh_is_noop_when_ip_unchanged(monkeypatch):
+    b = discovery.Broadcast(8787, "a1b2c3d4", "HOST")
+    b.ip = "192.168.1.5"
+    calls = []
+    monkeypatch.setattr(b, "start", lambda ip=None: calls.append(("start", ip)))
+    monkeypatch.setattr(b, "stop", lambda: calls.append(("stop",)))
+
+    assert b.refresh(ip="192.168.1.5") is False
+    assert calls == []
+
+
+def test_refresh_reregisters_when_ip_changed(monkeypatch):
+    """IP 变了必须先注销再重新注册，否则广播里还是旧地址。"""
+    b = discovery.Broadcast(8787, "a1b2c3d4", "HOST")
+    b.ip = "192.168.1.5"
+    calls = []
+    monkeypatch.setattr(b, "start", lambda ip=None: calls.append(("start", ip)))
+    monkeypatch.setattr(b, "stop", lambda: calls.append(("stop",)))
+
+    assert b.refresh(ip="192.168.1.9") is True
+    assert calls == [("stop",), ("start", "192.168.1.9")]
+
+
+def test_start_closes_socket_when_registration_fails(monkeypatch):
+    """注册失败时组播 socket 必须收回，否则进程余生都漏着它。"""
+    closed = []
+
+    class FakeZeroconf:
+        def __init__(self, interfaces=None):
+            pass
+
+        def register_service(self, info):
+            raise OSError("name collision")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(discovery, "Zeroconf", FakeZeroconf)
+    b = discovery.Broadcast(8787, "a1b2c3d4", "HOST")
+
+    with pytest.raises(OSError):
+        b.start(ip="192.168.1.5")
+
+    assert closed == [True]
+    assert b._zc is None

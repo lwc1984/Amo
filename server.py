@@ -95,18 +95,33 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 if __name__ == "__main__":
+    import threading
+    import time
+
     import uvicorn
 
     import discovery
 
     metrics.start_collector()
-    handle = None
+
+    bc = discovery.Broadcast(PORT, CFG.host_id, sessions.HOST)
     try:
-        handle = discovery.register(PORT, CFG.host_id, sessions.HOST)
-    except Exception as e:                  # 没网 / 端口占用都不该拦住主服务
+        bc.start()
+    except Exception as e:              # 没网 / 端口占用都不该拦住主服务
         print(f"mDNS 广播启动失败，设备得手填地址: {e}")
+
+    def _follow_ip():
+        """宿主 IP 变了就重新广播 —— 这正是当初选 mDNS 的理由。"""
+        while True:
+            time.sleep(30)
+            try:
+                bc.refresh()
+            except Exception as e:
+                print(f"mDNS 重新广播失败: {e}")
+
+    threading.Thread(target=_follow_ip, daemon=True).start()
+
     try:
         uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="warning")
     finally:
-        if handle:
-            discovery.unregister(handle)
+        bc.stop()
