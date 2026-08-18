@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+psutil
+nvidia-ml-py
+zeroconf
+pystray
+pillow
