@@ -92,16 +92,25 @@ button.armed{color:var(--run); border-color:var(--run)}
 <header>
   <h1>Agent 控制台</h1>
   <span id="conn" class="off">连接中</span>
-  <button id="arm">开启提醒</button>
+  <button id="arm">叫醒我</button>
 </header>
 
 <div id="metrics"></div>
 
 <div id="head">运行中的会话 · <span id="count">0</span></div>
 <div id="list"></div>
-<div id="empty" hidden>暂无会话。在任意项目里启动 Claude Code 就会出现在这里。</div>
+<div id="empty" hidden>一个会话都没有。随便找个项目敲 claude 就出来了。</div>
 
 <script>
+/* ── 令牌：URL 带一次，之后存起来 ── */
+const KEY_NAME = 'agentdash_token';
+const urlKey = new URLSearchParams(location.search).get('k');
+if (urlKey) {
+  localStorage.setItem(KEY_NAME, urlKey);
+  history.replaceState(null, '', location.pathname);   // 别把令牌留在地址栏
+}
+const TOKEN = localStorage.getItem(KEY_NAME);
+
 const $ = s => document.querySelector(s);
 let armed = false, audio = null, wakeLock = null, alerting = false, blinker = null;
 
@@ -112,7 +121,7 @@ $('#arm').onclick = async () => {
   if ('Notification' in window) { try { await Notification.requestPermission(); } catch {} }
   armed = true;
   $('#arm').classList.add('armed');
-  $('#arm').textContent = '提醒已开启';
+  $('#arm').textContent = '盯着呢';
   requestWakeLock();
   beep(880, .08);
 };
@@ -135,11 +144,11 @@ function startAlert(names) {
   beep(740, .16); setTimeout(() => beep(988, .22), 200);
   navigator.vibrate?.([180, 90, 180, 90, 300]);
   if (window.Notification?.permission === 'granted') {
-    new Notification('需要你处理', { body: names.join('、'), tag: 'agent-wait', renotify: true });
+    new Notification('哥们儿，该你了', { body: names.join('、'), tag: 'agent-wait', renotify: true });
   }
   const base = document.title;
   blinker = setInterval(() => {
-    document.title = document.title.startsWith('⚠') ? base : '⚠ 需要你处理';
+    document.title = document.title.startsWith('⚠') ? base : '⚠ 该你了';
   }, 900);
 }
 
@@ -188,7 +197,12 @@ function renderMetrics(m) {
       <div class="v">${v}<small>${u}</small></div>${h ? spark(h, c) : ''}</div>`).join('');
 }
 
-const LABEL = { running: '运行中', waiting: '等待你处理', idle: '空闲', stale: '失联' };
+const LABEL = {
+  running: '干着呢，别催',
+  waiting: '哥们儿，该你了',
+  idle:    '摸鱼中，等你发话',
+  stale:   '没声儿了，人呢？',
+};
 
 function renderSessions(list) {
   $('#count').textContent = list.length;
@@ -201,7 +215,7 @@ function renderSessions(list) {
           <span class="tag">${LABEL[s.state] || s.state}</span>
         </div>
         <div class="detail">${esc(s.detail || s.summary || '—')}</div>
-        <div class="path">${esc(s.cwd || '')}</div>
+        <div class="path">${esc(s.host || '')} · ${esc(s.cwd || '')}</div>
       </div>
     </div>`).join('');
 
@@ -214,15 +228,21 @@ const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&g
 
 /* ── SSE ── */
 function connect() {
-  const es = new EventSource('/api/stream');
-  es.onopen = () => { $('#conn').className = 'on'; $('#conn').textContent = '已连接'; };
+  if (!TOKEN) {
+    $('#conn').textContent = '未配对';
+    $('#empty').hidden = false;
+    $('#empty').textContent = '还没配对。在宿主机托盘里点『配对新设备』，然后从那儿复制地址过来。';
+    return;
+  }
+  const es = new EventSource('/api/stream?k=' + encodeURIComponent(TOKEN));
+  es.onopen = () => { $('#conn').className = 'on'; $('#conn').textContent = '连上了'; };
   es.onmessage = e => {
     const d = JSON.parse(e.data);
     renderMetrics(d.metrics);
     renderSessions(d.sessions);
   };
   es.onerror = () => {
-    $('#conn').className = 'off'; $('#conn').textContent = '断开，重连中';
+    $('#conn').className = 'off'; $('#conn').textContent = '断了，正重连';
     es.close(); setTimeout(connect, 3000);
   };
 }
