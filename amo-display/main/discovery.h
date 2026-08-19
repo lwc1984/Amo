@@ -1,6 +1,10 @@
 #pragma once
 #include "hosts.h"
 
+/* 单次 mDNS 查询会随机落空（组播 UDP 丢包 / 应答晚于超时），
+   所以内部重试这么多次，任一次查到就返回。 */
+#define DISCOVERY_ATTEMPTS 3
+
 /* 查询 _agentdash._tcp，把发现的主机填进 found（只填 host_id/name/ip/port）。
    返回发现数量。
 

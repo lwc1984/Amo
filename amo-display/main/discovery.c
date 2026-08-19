@@ -32,7 +32,8 @@ static bool first_ipv4(const mdns_result_t *r, char *out, size_t cap)
     return false;
 }
 
-int discovery_scan(host_t *found, int max, int timeout_ms)
+/* 单次查询。返回填入的数量。 */
+static int scan_once(host_t *found, int max, int timeout_ms)
 {
     mdns_result_t *results = NULL;
     esp_err_t err = mdns_query_ptr("_agentdash", "_tcp", timeout_ms, 20, &results);
@@ -64,6 +65,29 @@ int discovery_scan(host_t *found, int max, int timeout_ms)
     }
 
     mdns_query_results_free(results);
-    ESP_LOGI(TAG, "发现 %d 台", n);
     return n;
+}
+
+int discovery_scan(host_t *found, int max, int timeout_ms)
+{
+    /* 重试是必需的，不是保险措施。
+     *
+     * 实测同样的代码、同样的网络，连续三次扫描的结果可能是 1/1/1，也可能是
+     * 1/0/1 —— mDNS 走组播 UDP，丢一个包或者应答晚于超时窗口，单次查询就空手
+     * 而归。把"一次没查到"当成"没有主机"，用户体验就是长按配对时好时坏。
+     *
+     * 所以在这里消化掉，而不是让每个调用方各自重试：不可靠是 mDNS 的固有属性，
+     * 不是调用方的问题。 */
+    for (int attempt = 1; attempt <= DISCOVERY_ATTEMPTS; attempt++) {
+        int n = scan_once(found, max, timeout_ms);
+        if (n > 0) {
+            if (attempt > 1) {
+                ESP_LOGI(TAG, "第 %d 次尝试才查到", attempt);
+            }
+            ESP_LOGI(TAG, "发现 %d 台", n);
+            return n;
+        }
+    }
+    ESP_LOGW(TAG, "%d 次尝试都没发现主机", DISCOVERY_ATTEMPTS);
+    return 0;
 }

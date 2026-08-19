@@ -76,6 +76,16 @@ esp_err_t net_wifi_start(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    /* 关掉 WiFi 省电。
+     *
+     * 默认是 WIFI_PS_MIN_MODEM，站点会周期性休眠。mDNS 走组播，而组播帧由 AP
+     * 按 DTIM 周期缓冲下发 —— 休眠中的站点很容易整帧错过。症状极具迷惑性：
+     * 开机刚连上时射频全程唤醒，发现正常；空闲两三分钟后进入省电，同样的查询
+     * 就一台都扫不到，看起来像"mDNS 缓存问题"或"主机不广播了"。
+     *
+     * 这是插着电的桌面设备，省那点电没有意义，而漏掉一次发现就意味着配不上对。 */
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+
     ESP_LOGI(TAG, "连接 SSID \"%s\" ...", CONFIG_AGENT_WIFI_SSID);
     EventBits_t bits = xEventGroupWaitBits(s_events, GOT_IP, pdFALSE, pdFALSE,
                                            pdMS_TO_TICKS(20000));
