@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A local monitoring dashboard for Claude Code sessions. A FastAPI service on the Windows host
 receives Claude Code hooks, folds them into per-session state, and serves that state to a
-tablet page, a Windows tray icon, and (planned) an ESP32 AMOLED desk display.
+tablet page, a Windows tray icon, and an ESP32 desk display shaped like a monster's mouth.
 
 Each host runs its own service. A device sees only the hosts it has paired with, so a
 colleague's machine on the same LAN is discoverable but unreadable.
@@ -18,17 +18,33 @@ All UI text and comments are Chinese. Match that when editing.
 ```powershell
 pip install -r requirements-dev.txt     # 含 pytest / httpx / httpx2 / pyinstaller
 
-python -m pytest tests/ -v              # 100 tests
+python -m pytest tests/ -v              # 126 tests
 python server.py                        # 0.0.0.0:8787，无托盘
 python tray.py                          # 托盘 + 同一个服务，日常用这个
 build.bat                               # -> dist\AgentDashboard\AgentDashboard.exe
 ```
 
+Firmware (needs the IDF env plus w64devkit's gcc/make on PATH — see `amo-display/README.md`):
+
+```powershell
+cd amo-display\host_test ; make          # 76 assertions, pure logic, no hardware needed
+cd amo-display ; idf.py build            # then: idf.py -p COM<n> flash
+```
+
+**After `idf.py flash`, unplug and replug the USB.** The board uses the chip's built-in
+USB-Serial-JTAG; esptool's closing reset usually leaves it in download mode, which looks
+exactly like a dead board — flashing succeeded but the serial port stays silent.
+
 `tray.py` is the packaged entry point and a strict superset of `server.py`.
 
-Firmware: `agent_display.ino` is the pre-rewrite skeleton and **does not work against the
-current server** — it polls `/api/tiny` without a token and its `BUZZER_PIN 2` collides with
-this board's I2C SCL. It is replaced wholesale by the ESP32 plan (see Roadmap).
+Firmware lives in `amo-display/` (ESP-IDF). `agent_display.ino` is the dead pre-rewrite
+skeleton — it targets the wrong board entirely and is kept only as history.
+
+The board is a **LilyGo T-Display S3** (ST7789 LCD 170×320 over an 8-bit i80 bus, no PMU,
+no touch, no RGB LED), not the AMOLED model the early docs assumed. It is mounted inside
+the mouth opening of a 3D-printed pixel-art Claude monster, so the UI is a **face**, not a
+dashboard: five states, five mouth shapes. See spec §5.1 (hardware, verified on the
+physical board) and §5.3 (the mouth).
 
 ## Architecture
 
@@ -155,7 +171,10 @@ Browser copy is duplicated in `static/index.html` because JS cannot import `phra
 ## Roadmap
 
 `docs/superpowers/specs/2026-08-18-agent-dashboard-design.md` is the design authority.
-`docs/superpowers/plans/2026-08-18-host-dashboard.md` is this (completed) plan. The ESP32
-firmware is a separate plan, not yet written; it depends on `/api/tiny` and `/api/pair`,
-targets T-Display-AMOLED-Lite (SH8501B0, 194×368, landscape 368×194), and must be built
-against `LilyGo-Display-IDF`, which wants ESP-IDF 5.3.
+`docs/superpowers/plans/2026-08-18-host-dashboard.md` is the (completed) host plan.
+`docs/superpowers/plans/2026-08-18-esp32-display.md` is the ESP32 plan — **Tasks 0-9 are
+done and its body is largely superseded**; the code is the authority for those, and each
+deviation is recorded in the commit that made it. Its top banner tracks what still stands.
+
+Remaining: Task 10 (cleanup), verifying `/api/pair` returns 403 once the window closes
+(needs the board's NVS cleared, which needs a button press), and tablet QR pairing.
