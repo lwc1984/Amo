@@ -112,8 +112,11 @@ void app_main(void)
     ESP_LOGI(TAG, "四条状态色带已画：run 青蓝 / wait 琥珀 / idle 深蓝灰 / stale 砖红");
 
     /* 屏幕先亮起来再连网 —— 连不上时至少能看见东西，而不是一块黑板。 */
-    ESP_ERROR_CHECK(mdns_init());
     if (net_wifi_start() == ESP_OK) {
+        /* mdns_init() 必须在 net_wifi_start() 之后。它依赖 esp_netif_init() 与
+           默认事件循环，而那两样是在 net_wifi_start() 里建的。顺序反了会返回
+           ESP_FAIL —— 报错只说 mdns_init 失败，完全不提是缺了 netif。 */
+        ESP_ERROR_CHECK(mdns_init());
         ESP_LOGI(TAG, "WiFi 已连接，开始 mDNS 发现");
         host_t found[HOSTS_MAX];
         int n = discovery_scan(found, HOSTS_MAX, 3000);
@@ -125,7 +128,7 @@ void app_main(void)
             ESP_LOGW(TAG, "一台都没发现。确认宿主端在跑，且板子与它同一子网。");
         }
     } else {
-        ESP_LOGE(TAG, "WiFi 连不上。menuconfig -> Agent Display 里填 SSID 与密码。");
+        ESP_LOGE(TAG, "WiFi 连不上。检查 sdkconfig 里的 SSID/密码，以及是否 2.4GHz。");
     }
 
     uint32_t beat = 0;
