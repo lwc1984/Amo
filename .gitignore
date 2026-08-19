@@ -16,3 +16,9 @@ amo-display/host_test/test_tiny_parse
 amo-display/host_test/test_hosts
 .npm-cache/
 .superpowers/
+
+# SolidWorks 打开零件时生成的锁文件。文件名以 ~$ 开头，只有几字节，
+# 关掉软件就消失 —— 进了版本库只会制造无意义的改动和冲突。
+~$*
+*.SLDPRT.bak
+*.SLDASM.bak
