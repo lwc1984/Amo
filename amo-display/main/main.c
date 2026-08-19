@@ -23,6 +23,7 @@
 #include "hosts_nvs.h"
 #include "net_wifi.h"
 #include "pairing.h"
+#include "poller.h"
 #include "tds3_board.h"
 
 static const char *TAG = "amo";
@@ -189,6 +190,8 @@ void app_main(void)
                  s_hosts.count, c ? c->name : "(无)");
     }
 
+    poller_start(&s_hosts);
+
     /* 按键要 50ms 轮询，心跳每 5 秒打一次 —— 用计数分频，不另开任务。 */
     uint32_t beat = 0, ticks = 0;
     while (1) {
@@ -201,12 +204,21 @@ void app_main(void)
             ESP_LOGI(TAG, "切换到 %s", c ? c->name : "(无)");
         }
 
-        if (++ticks >= 100) {              /* 100 * 50ms = 5 秒 */
+        if (++ticks >= 60) {               /* 60 * 50ms = 3 秒 */
             ticks = 0;
-            ESP_LOGI(TAG, "心跳 %lu | 屏 %dx%d | WiFi %s | 已配对 %d 台 | 空闲堆 %lu",
-                     (unsigned long)++beat, TDS3_WIDTH, TDS3_HEIGHT,
-                     net_wifi_is_up() ? "已连" : "断开", s_hosts.count,
-                     (unsigned long)esp_get_free_heap_size());
+            view_t v;
+            if (poller_take(&v)) {
+                static const char *SN[] = {"连不上", "摸鱼中", "干着呢", "该你了", "没声儿了"};
+                ESP_LOGI(TAG, "[%lu] %s | %s | %s | %s | cpu%d mem%d gpu%d net%d%s%s",
+                         (unsigned long)++beat, SN[v.state], v.host,
+                         v.name[0] ? v.name : "(无会话)",
+                         v.detail[0] ? v.detail : "-",
+                         v.cpu, v.mem, v.gpu, v.net_kb,
+                         v.peer_needs_you ? " | 另一台在等: " : "",
+                         v.peer_needs_you ? v.peer_name : "");
+            } else {
+                ESP_LOGW(TAG, "[%lu] 取不到视图（锁超时）", (unsigned long)++beat);
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(50));
     }
