@@ -10,5 +10,9 @@ sdkconfig.old
 amo-display/build/
 amo-display/tools/*.otf
 amo-display/tools/*.ttf
+# 主机测试台的产物：exe 名字随 Makefile 目标走，无扩展名的那个是 Linux 下的
+amo-display/host_test/*.exe
+amo-display/host_test/test_tiny_parse
+amo-display/host_test/test_hosts
 .npm-cache/
 .superpowers/
