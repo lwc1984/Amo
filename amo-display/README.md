@@ -1,6 +1,9 @@
 # ESP32 端 —— LilyGo T-Display S3
 
 ST7789 LCD 170×320，8 位 I8080 并口，无 PMU、无触摸、无 RGB 灯。
+
+这块屏嵌在 3D 打印的 Claude 像素风小怪物的嘴部开口里（约 40×23mm），
+所以 UI 不是一块"显示器"而是一张脸：五种状态各有嘴型，详见 spec §5.3。
 硬件事实与三个软件坑的权威记录在
 `docs/superpowers/specs/2026-08-18-agent-dashboard-design.md` §5.1。
 
@@ -64,6 +67,33 @@ CMake Error at .../kconfig.cmake:209 (message): Failed to run kconfgen
 若上次构建是半途失败的，`idf.py fullclean` 会以 "doesn't seem to be a CMake build
 directory" 拒绝执行，**并连带 `set-target` 一起失败**（后者把 fullclean 作为前置依赖）。
 手动 `Remove-Item build -Recurse -Force` 即可。
+
+## 看不到屏幕时怎么验证 UI
+
+`tds3_dump_frame()` 把 LVGL 刷过的影子缓冲（PSRAM）以 base64 的 RGB565 吐到串口，
+主机侧还原成 PNG。开发时人不在板子旁边、或者根本看不到屏幕时，这让
+"UI 长什么样"从一个只能靠肉眼的问题变成**可自动检查**的问题。
+
+```powershell
+idf.py menuconfig     # Agent Display -> 开机后 dump 一帧屏幕内容到串口
+```
+
+配套的主机脚本在开发时用过两个版本：抓一帧（`grab.py`）和抓多帧（`grab_all.py`），
+都是复位板子、读串口、找 `FRAME_BEGIN ... FRAME_END`、解 base64、拼 PNG。
+它们没有签入仓库 —— 逻辑只有几十行，且高度依赖具体串口号。
+
+它当场抓出过三个只看日志绝对发现不了的问题：颜色双重对调、中文一个字都不显示
+（字库是压缩的但 `LV_USE_FONT_COMPRESSED` 没开，LVGL 静默不画）、标点全是缺字方框。
+
+## UI 演示模式
+
+```powershell
+idf.py menuconfig     # Agent Display -> UI 演示模式：轮流展示五种状态
+```
+
+忽略真实会话，轮流展示五种状态。**idle 与 nolink 在真实环境里几乎凑不出来** ——
+只要你还在敲代码就不会有 idle，nolink 要等真断网 —— 但它们同样需要被看过一眼。
+配合上面的 dump 可以一次抓齐五张图。给人看这只小怪物时也用得上。
 
 ## 主机侧测试台
 
