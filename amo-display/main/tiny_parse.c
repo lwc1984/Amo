@@ -35,9 +35,10 @@ bool tiny_parse(const char *body, tiny_t *out)
         return false;                       /* 只有一行，不合法 */
     }
 
-    int ver = 0, w = 0, r = 0, i = 0;
+    int ver = 0, w = 0, r = 0, i = 0, st = 0;
     int consumed = 0;
-    if (sscanf(l1, "%d|%d,%d,%d|%n", &ver, &w, &r, &i, &consumed) != 4 || consumed == 0) {
+    if (sscanf(l1, "%d|%d,%d,%d,%d|%n", &ver, &w, &r, &i, &st, &consumed) != 5
+        || consumed == 0) {
         return false;
     }
     if (ver != TINY_VERSION) {
@@ -51,6 +52,7 @@ bool tiny_parse(const char *body, tiny_t *out)
     out->waiting = w;
     out->running = r;
     out->idle = i;
+    out->stale = st;
 
     /* ---- 第 2 行：会话名\tdetail（可为空行）---- */
     const char *l2 = l1_end + 1;

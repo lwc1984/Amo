@@ -19,9 +19,29 @@ def test_three_lines_exactly():
 
 def test_counts_and_host_on_first_line():
     s = [sess("waiting", "a"), sess("running", "b"), sess("running", "c"),
-         sess("idle", "d")]
+         sess("idle", "d"), sess("stale", "e")]
     line1 = tiny.render_tiny(make_snap(s)).split("\n")[0]
-    assert line1 == "1|1,2,1|WORKSTATION"
+    assert line1 == "2|1,2,1,1|WORKSTATION"
+
+
+def test_stale_is_counted_separately():
+    """stale 不计进任何一个的话，固件只会看到 0,0,0，把失联渲染成「摸鱼中」。
+
+    设计里那条「断连绝不能渲染成正常」正是靠这个计数落地的：
+    第四种状态必须在协议里有自己的位置，不能靠推断。
+    """
+    line1 = tiny.render_tiny(make_snap([sess("stale", "失联了")])).split(chr(10))[0]
+    assert line1 == "2|0,0,0,1|WORKSTATION"
+
+
+def test_version_is_two():
+    """加了 stale 计数，老固件按三个数解析会读错，所以必须升版本号。
+
+    tiny_parse 对不认识的版本整体拒绝而不是猜 —— 宁可显示「连不上」，
+    也不要显示一个错的状态。
+    """
+    assert tiny.TINY_VERSION == 2
+    assert tiny.render_tiny(make_snap([])).split("|")[0] == "2"
 
 
 def test_top_session_is_the_first_one():
