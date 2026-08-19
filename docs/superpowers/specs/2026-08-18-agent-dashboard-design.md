@@ -8,7 +8,8 @@
 ## 0. 现状与要解决的问题
 
 仓库里有一份从设计对话导出的骨架：`server.py`、`index.html`、`tray.py`、
-`build.bat`、`hooks-snippet.json`、`agent_display.ino`。骨架的状态机和视觉语言是对的，
+`build.bat`、`hooks-snippet.json`、`agent_display.ino`（该文件已于 2026-08-20 删除，
+它针对的是完全不同的板子）。骨架的状态机和视觉语言是对的，
 但有四个缺陷让它跑不起来或不能用：
 
 1. `server.py` 服务 `static/index.html` 并挂载 `StaticFiles(directory=BASE/"static")`，

@@ -37,8 +37,12 @@ netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow pr
 除 `/api/pair` 外，`/api/*` 都需要它，所以直接打开 `http://<IP>:8787` 是看不到数据的；
 `/api/pair` 只在配对窗口开启的 60 秒内响应，不需要令牌。
 
-- **平板**：托盘菜单点「复制平板地址」，粘到平板浏览器打开一次即可，令牌会存进 localStorage
-- **ESP32**：托盘菜单点「配对新设备（60 秒）」，然后长按板子上的 GPIO21 三秒
+- **平板**：在宿主机本地打开 <http://localhost:8787>，点右上角「配对平板」，用平板扫码。
+  打开一次令牌就存进 localStorage，之后直接访问 IP 即可。
+  二维码接口只对回环开放 —— 平板上打开这个页面看不到那个按钮，因为二维码里带着令牌，
+  画给整个局域网看等于把令牌公开。托盘菜单的「复制平板地址」也还在，手敲用。
+- **ESP32**：托盘菜单点「配对新设备（60 秒）」，然后长按板子上的 **GPIO14** 三秒。
+  开机时按住 GPIO14 两秒可清空已配对记录（换宿主机或令牌失效时用）。
 
 `/hook/*` 只接受本机来源，所以 `hooks-snippet.json` 里的地址必须是 `127.0.0.1`，
 换成局域网 IP 会被 403。
@@ -57,7 +61,15 @@ netsh advfirewall firewall add rule name="AgentDashboard" dir=in action=allow pr
 - **彻底**：宿主机上用 `mkcert` 给局域网 IP 签证书，平板装一次根 CA，改成 HTTPS。
   之后 Wake Lock、系统通知、PWA 安装到桌面全部可用。
 
-## 5. 后续可以加的
+## 5. ESP32 桌面显示器
+
+固件在 `amo-display/`，构建与烧录见 `amo-display/README.md`。
+
+板子是 **LilyGo T-Display S3**，嵌在 3D 打印的 Claude 像素风小怪物的嘴部开口里 ——
+所以那块屏不是"显示器"而是一张脸：六种状态各有嘴型，颜色与本页面、托盘逐值一致。
+设计见 `docs/superpowers/specs/2026-08-18-agent-dashboard-design.md` §5。
+
+## 6. 后续可以加的
 
 - **手机兜底推送**：在 `hook()` 的 `waiting` 分支里加一行 POST 到 ntfy.sh / Bark，
   人不在平板前也能收到。

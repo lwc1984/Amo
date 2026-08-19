@@ -1,5 +1,18 @@
 # 宿主端控制台 Implementation Plan
 
+> ## ⚠ 已完成的历史记录，其中关于 ESP32 的部分已作废
+>
+> 本计划完成于 2026-08-18，只做宿主端。其中提到 ESP32 的地方（`agent_display.ino`、
+> GPIO21、AMOLED）都基于当时误判的硬件型号，**现已全部作废**：
+>
+> - `agent_display.ino` 已删除
+> - 板子实为 LilyGo T-Display S3，按键是 **GPIO14**
+> - 固件在 `amo-display/`，见 `docs/superpowers/plans/2026-08-18-esp32-display.md`
+>
+> 宿主端部分（服务、鉴权、配对、托盘、页面）仍然有效，但页面与协议此后有变更
+> （二维码配对、协议 v3、新增「憋大招」状态），以代码为准。
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 把仓库里起不来的服务骨架变成一个可启动、有鉴权、能被 ESP32 和平板消费的宿主端控制台。

@@ -37,8 +37,9 @@ exactly like a dead board — flashing succeeded but the serial port stays silen
 
 `tray.py` is the packaged entry point and a strict superset of `server.py`.
 
-Firmware lives in `amo-display/` (ESP-IDF). `agent_display.ino` is the dead pre-rewrite
-skeleton — it targets the wrong board entirely and is kept only as history.
+Firmware lives in `amo-display/` (ESP-IDF). The old `agent_display.ino` skeleton was
+deleted — it targeted the wrong board entirely, and a file full of plausible-looking
+wrong code is worse than no file. `git log` still has it.
 
 The board is a **LilyGo T-Display S3** (ST7789 LCD 170×320 over an 8-bit i80 bus, no PMU,
 no touch, no RGB LED), not the AMOLED model the early docs assumed. It is mounted inside
