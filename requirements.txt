@@ -5,3 +5,4 @@ nvidia-ml-py
 zeroconf
 pystray
 pillow
+qrcode

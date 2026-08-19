@@ -3,10 +3,13 @@
 启动: python server.py    监听 0.0.0.0:8787
 """
 import asyncio
+import io
 import json
 import sys
 from pathlib import Path
 
+import qrcode
+import qrcode.image.svg
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -130,6 +133,34 @@ async def pair(request: Request):
         raise HTTPException(403, "配对窗口没开")
     PAIRING.record(request.client.host if request.client else "?")
     return {"token": CFG.token, "host_id": CFG.host_id, "host": sessions.HOST}
+
+
+def pair_url(ip: str | None = None) -> str:
+    """平板要打开的完整地址。令牌走查询参数，页面收到后存进 localStorage 再抹掉地址栏。"""
+    import discovery
+
+    return f"http://{ip or discovery.local_ip()}:{PORT}/?k={CFG.token}"
+
+
+@app.get("/api/qr", dependencies=[Depends(require_loopback)])
+async def qr_endpoint():
+    """配对二维码，只对回环开放。
+
+    图里编的是带令牌的地址。页面外壳本身不需要令牌就发给整个局域网，所以二维码
+    一旦对局域网可见，同网段任何设备扫一下就绕过了 60 秒配对窗口。这个 403 是
+    整个功能的前提，不是可以放宽的细节。
+    """
+    url = pair_url()
+    img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage)
+    buf = io.BytesIO()
+    img.save(buf)
+    # 砍掉 XML 前言：这段 SVG 是用 innerHTML 塞进 HTML 文档的，
+    # <?xml ...?> 在 HTML 解析器眼里是个伪注释节点，纯属垃圾。
+    svg = buf.getvalue().decode("utf-8")
+    svg = svg[svg.index("<svg"):]
+    # 明文地址一并给出：页面是从 localhost 打开的，自己不知道宿主的局域网 IP，
+    # 而扫不动时的手抄兜底行必须显示完整地址。
+    return {"url": url, "svg": svg}
 
 
 @app.post("/api/pair/open", dependencies=[Depends(require_loopback)])

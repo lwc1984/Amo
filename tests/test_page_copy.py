@@ -24,5 +24,6 @@ def test_page_carries_shared_strings():
     html = PAGE.read_text(encoding="utf-8")
     for s in (phrases.EMPTY_LIST, phrases.CONN_ON, phrases.CONN_OFF,
               phrases.ARM_BUTTON, phrases.ARMED_BUTTON, phrases.UNPAIRED,
-              phrases.TOKEN_STALE):
+              phrases.TOKEN_STALE, phrases.QR_BUTTON, phrases.QR_TITLE,
+              phrases.QR_HINT):
         assert s in html, f"页面缺少共享文案: {s}"

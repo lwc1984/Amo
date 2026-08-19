@@ -82,6 +82,23 @@ button.armed{color:var(--run); border-color:var(--run)}
 
 #empty{padding:0 20px; color:var(--dim); font-size:15px}
 
+/* ── 配对二维码浮层 ─────────────────────────── */
+#qrmask{
+  position:fixed; inset:0; z-index:20; background:rgba(6,10,18,.88);
+  display:flex; align-items:center; justify-content:center; padding:24px;
+}
+#qrmask[hidden]{display:none}          /* display:flex 会盖掉 hidden，得显式关掉 */
+#qrbox{
+  background:var(--surface); border:1px solid var(--line); border-radius:4px;
+  padding:24px; max-width:min(92vw,420px); text-align:center;
+}
+#qrbox h2{font-size:16px; font-weight:600; letter-spacing:.1em; margin-bottom:18px}
+#qrimg{background:#fff; padding:12px; border-radius:3px; display:inline-block; line-height:0}
+#qrimg svg{display:block; width:min(68vw,264px); height:auto}
+#qrhint{margin-top:16px; font-size:13px; color:var(--dim); line-height:1.6}
+#qrurl{margin-top:10px; font-size:12px; color:#4A5670; word-break:break-all;
+  user-select:all; line-height:1.7}
+
 @media (prefers-reduced-motion:reduce){ *{animation:none !important} }
 @media (max-width:520px){ .metric .v{font-size:28px} }
 </style>
@@ -92,8 +109,18 @@ button.armed{color:var(--run); border-color:var(--run)}
 <header>
   <h1>Agent 控制台</h1>
   <span id="conn" class="off">连接中</span>
+  <button id="qr" hidden>配对平板</button>
   <button id="arm">叫醒我</button>
 </header>
+
+<div id="qrmask" hidden>
+  <div id="qrbox">
+    <h2>用平板扫这个</h2>
+    <div id="qrimg"></div>
+    <div id="qrhint">扫不动就照着下面这行手敲。地址里带着令牌，别截图发群里。</div>
+    <div id="qrurl"></div>
+  </div>
+</div>
 
 <div id="metrics"></div>
 
@@ -114,6 +141,26 @@ const TOKEN = localStorage.getItem(KEY_NAME);
 const $ = s => document.querySelector(s);
 const TITLE = 'Agent 控制台';
 let armed = false, audio = null, wakeLock = null, alerting = false, blinker = null;
+
+/* ── 配对二维码：只有在宿主机本机打开时才有这个入口 ──
+   /api/qr 只对回环开放。平板上打开这个页面拿到的是 403，按钮就一直藏着。
+   二维码里编的是带令牌的地址，画给整个局域网看等于把令牌公开，
+   60 秒配对窗口也就白设了。 */
+fetch('/api/qr')
+  .then(r => r.ok ? r.json() : null)
+  .then(d => {
+    if (!d) return;                      // 403：不是本机，入口不出现
+    $('#qrimg').innerHTML = d.svg;
+    $('#qrurl').textContent = d.url;
+    $('#qr').hidden = false;
+  })
+  .catch(() => {});                      // 服务没起来时静默，页面其余部分照常
+
+$('#qr').onclick = () => $('#qrmask').hidden = false;
+$('#qrmask').onclick = () => $('#qrmask').hidden = true;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') $('#qrmask').hidden = true;
+});
 
 /* ── 提醒：声音 + 震动 + 标题闪烁 + 系统通知 ── */
 $('#arm').onclick = async () => {
