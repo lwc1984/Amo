@@ -15,3 +15,4 @@
 #define UI_S_PAIR_OK  "配上了"
 #define UI_S_PAIR_NO  "没找着"
 #define UI_S_NOHOST   "还没配对"
+#define UI_S_CLEARED  "配对已清空"

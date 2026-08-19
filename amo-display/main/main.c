@@ -26,6 +26,7 @@
 #include "poller.h"
 #include "tds3_board.h"
 #include "ui.h"
+#include "ui_strings.h"
 
 static const char *TAG = "amo";
 
@@ -114,6 +115,25 @@ void app_main(void)
     }
 
     buttons_init();
+
+    /* 开机按住 GPIO14 两秒清空配对。
+     *
+     * 放在屏幕初始化之后：这个操作不可撤销，清完必须重新走一遍宿主端的配对
+     * 窗口才能再读到数据，所以必须让人看见它发生了 —— 悄悄清掉，下次开机
+     * 只会表现成"怎么连不上了"。
+     * 要求持续按住而不是按一下，是为了防误触。 */
+    if (buttons_held_at_boot(2000)) {
+        ESP_LOGW(TAG, "开机时按住了 GPIO14 —— 清空配对");
+        hosts_nvs_clear();
+        {
+            view_t cleared = {0};
+            cleared.state = VS_NOLINK;
+            snprintf(cleared.name, sizeof(cleared.name), "%s", UI_S_CLEARED);
+            ui_render(&cleared);
+        }
+        vTaskDelay(pdMS_TO_TICKS(2500));   /* 停一下，让人读到 */
+    }
+
     hosts_nvs_load(&s_hosts);
     {
         const host_t *c = hosts_current(&s_hosts);

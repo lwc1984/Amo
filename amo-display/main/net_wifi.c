@@ -47,6 +47,12 @@ esp_err_t net_wifi_start(void)
 {
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        /* 这段是 ESP-IDF 的标准样板，但它有个不明显的后果：nvs_flash_erase()
+           抹掉的是**整个 NVS 分区**，包括我们存的配对记录和令牌。
+           样板本身没错（NVS 满了确实只能重来），错在它一声不吭 —— 表现就是
+           某天开机突然"连不上"，而没人会想到是这里。所以大声报出来。 */
+        ESP_LOGE(TAG, "NVS 需要重新格式化（%s）—— 整个分区会被抹掉，"
+                      "包括配对记录。之后需要重新配对。", esp_err_to_name(err));
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }

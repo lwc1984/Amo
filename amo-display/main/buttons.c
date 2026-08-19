@@ -1,6 +1,8 @@
 #include "buttons.h"
 
 #include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_timer.h"
 
 #define BTN_GPIO      14
@@ -48,4 +50,16 @@ btn_event_t buttons_poll(void)
         }
     }
     return BTN_NONE;
+}
+
+bool buttons_held_at_boot(int hold_ms)
+{
+    const int step = 50;
+    for (int waited = 0; waited < hold_ms; waited += step) {
+        if (gpio_get_level(BTN_GPIO) != 0) {
+            return false;               /* 松开就算了，不做部分生效 */
+        }
+        vTaskDelay(pdMS_TO_TICKS(step));
+    }
+    return gpio_get_level(BTN_GPIO) == 0;
 }

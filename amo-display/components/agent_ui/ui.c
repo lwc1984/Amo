@@ -376,7 +376,9 @@ void ui_render(const view_t *v)
     }
 
     if (v->state == VS_NOLINK) {
-        lv_label_set_text(s_name, "");
+        /* name 通常为空，但"配对已清空"这类一次性提示会借用它 ——
+           那条消息必须显示出来，否则清掉配对这件事就静默发生了。 */
+        lv_label_set_text(s_name, v->name);
         lv_label_set_text(s_detail, "");
         lv_label_set_text(s_peek, "");
         lv_label_set_text(s_count, "");

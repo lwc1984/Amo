@@ -57,3 +57,22 @@ esp_err_t hosts_nvs_save(const hosts_t *h)
     nvs_close(nh);
     return err;
 }
+
+esp_err_t hosts_nvs_clear(void)
+{
+    nvs_handle_t nh;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &nh);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = nvs_erase_key(nh, KEY);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        err = ESP_OK;                   /* 本来就是空的，不算失败 */
+    }
+    if (err == ESP_OK) {
+        err = nvs_commit(nh);
+    }
+    nvs_close(nh);
+    ESP_LOGW(TAG, "已抹掉配对记录");
+    return err;
+}

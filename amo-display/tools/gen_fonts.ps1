@@ -33,7 +33,7 @@ New-Item -ItemType Directory -Force -Path $fontDir | Out-Null
 # 必须覆盖 ui_strings.h 里所有 UI_S_* 用到的字。
 # tests/test_firmware_copy.py 会核对这一点 —— 曾经漏过：加了「憋大招」状态却
 # 忘了重新生成字库，屏幕上就是三个缺字方框，而所有测试照常通过。
-$statusChars = "上不中了你儿呢声大对干憋找招摸没着该还连配鱼"
+$statusChars = "上不中了你儿呢声大对已干憋找招摸没清着空该还连配鱼"
 
 # 会话名可能是任意中文。完整 0x4E00-0x9FA5（~20900 字）在 4bpp 下会产出
 # 数 MB 的 .c 文件，超出 3M app 分区的余量（固件本体约占 1M）。
