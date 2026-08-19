@@ -35,4 +35,14 @@ config AGENT_DUMP_FRAME_ON_BOOT
         "UI 长什么样"因此从只能靠肉眼的问题变成可自动检查的问题。
         正常固件不需要，默认关闭：一帧约 145KB base64，会把串口刷屏十几秒。
 
+config AGENT_UI_DEMO
+    bool "UI 演示模式：轮流展示五种状态"
+    default n
+    help
+        忽略真实会话，每 4 秒切一种状态，循环展示。
+        用途有二：一是验证 UI —— 五种状态里 idle 与 nolink 在真实环境里
+        很难凑出来（只要你还在敲代码，就不会有 idle）；二是给人看这只
+        小怪物时不必等它恰好进入某个状态。
+        配合 AGENT_DUMP_FRAME_ON_BOOT 可以一次抓齐五张图。
+
 endmenu

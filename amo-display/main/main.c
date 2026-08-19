@@ -121,6 +121,39 @@ void app_main(void)
                  s_hosts.count, c ? c->name : "(无)");
     }
 
+#ifdef CONFIG_AGENT_UI_DEMO
+    /* 演示模式：不轮询，直接把五种状态轮流喂给 UI。
+       idle 与 nolink 在真实环境里很难凑出来 —— 只要你还在敲代码就不会有 idle，
+       而 nolink 要等真断网。它们同样需要被看过一眼。 */
+    {
+        static const char *NAMES[] = {"", "恐龙公园初始化", "amo-display",
+                                      "机械时代本地化", "星光护卫队"};
+        static const char *DETAILS[] = {"", "干完了", "Bash: npm run build",
+                                        "要不要把这个目录删掉？", "Read"};
+        static const view_state_t ORDER[] = {VS_RUNNING, VS_WAITING, VS_IDLE,
+                                             VS_STALE, VS_NOLINK};
+        for (int round = 0; round < 3; round++) {
+            for (int i = 0; i < 5; i++) {
+                view_t d = {0};
+                d.state = ORDER[i];
+                snprintf(d.host, sizeof(d.host), "USER-20220210RC");
+                snprintf(d.name, sizeof(d.name), "%s", NAMES[i]);
+                snprintf(d.detail, sizeof(d.detail), "%s", DETAILS[i]);
+                d.cpu = 42; d.mem = 55; d.gpu = -1; d.net_kb = 7;
+                ui_render(&d);
+                ESP_LOGW(TAG, "演示：第 %d 种状态", i + 1);
+                vTaskDelay(pdMS_TO_TICKS(2500));
+#ifdef CONFIG_AGENT_DUMP_FRAME_ON_BOOT
+                if (round == 0) {
+                    tds3_dump_frame();
+                }
+#endif
+                vTaskDelay(pdMS_TO_TICKS(1200));
+            }
+        }
+    }
+#endif
+
     poller_start(&s_hosts);
 
     /* 一个循环三种节奏，用计数分频，不另开任务：
