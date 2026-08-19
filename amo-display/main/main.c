@@ -17,9 +17,12 @@
 
 #include "mdns.h"
 
+#include "buttons.h"
 #include "discovery.h"
 #include "hosts.h"
+#include "hosts_nvs.h"
 #include "net_wifi.h"
+#include "pairing.h"
 #include "tds3_board.h"
 
 static const char *TAG = "amo";
@@ -88,6 +91,53 @@ static void draw_bands(void)
     }
 }
 
+static hosts_t s_hosts;
+
+/* 长按触发：扫 mDNS，对每台没配对过的主机试一次 /api/pair。
+ *
+ * 会对**所有**发现到的主机发起请求，包括同事的机器 —— 但那没有风险：
+ * 对方没点开配对窗口就是 403，且每次成功配对都会在对方机器上弹一次气泡。
+ * 想偷偷配上别人的机器，需要恰好在对方主动开窗口的 60 秒内动手，而且对方会看见。
+ */
+static void do_pairing(void)
+{
+    ESP_LOGI(TAG, "开始配对扫描");
+    host_t found[HOSTS_MAX];
+    int n = discovery_scan(found, HOSTS_MAX, 3000);
+    int added = 0;
+
+    for (int i = 0; i < n; i++) {
+        if (hosts_find(&s_hosts, found[i].host_id) >= 0) {
+            /* 已配对过，只更新地址。令牌不动 —— DHCP 换个 IP 不该让人重配一次。 */
+            hosts_set_addr(&s_hosts, found[i].host_id, found[i].ip, found[i].port);
+            ESP_LOGI(TAG, "%s 已配对，更新地址为 %s:%d",
+                     found[i].name, found[i].ip, found[i].port);
+            continue;
+        }
+
+        char token[40];
+        if (pairing_request(found[i].ip, found[i].port, token, sizeof(token))) {
+            host_t h = found[i];
+            snprintf(h.token, sizeof(h.token), "%s", token);
+            if (hosts_upsert(&s_hosts, &h)) {
+                added++;
+                ESP_LOGI(TAG, "配对成功: %s", h.name);
+            } else {
+                ESP_LOGW(TAG, "主机表满了（上限 %d），%s 没能加进去",
+                         HOSTS_MAX, h.name);
+            }
+        }
+    }
+
+    if (n > 0) {
+        esp_err_t err = hosts_nvs_save(&s_hosts);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "存 NVS 失败: %s", esp_err_to_name(err));
+        }
+    }
+    ESP_LOGI(TAG, "配对结束，新增 %d 台，共 %d 台", added, s_hosts.count);
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "启动");
@@ -131,12 +181,33 @@ void app_main(void)
         ESP_LOGE(TAG, "WiFi 连不上。检查 sdkconfig 里的 SSID/密码，以及是否 2.4GHz。");
     }
 
-    uint32_t beat = 0;
+    buttons_init();
+    hosts_nvs_load(&s_hosts);
+    {
+        const host_t *c = hosts_current(&s_hosts);
+        ESP_LOGI(TAG, "已配对 %d 台，当前 %s。长按 GPIO14 三秒配对新主机。",
+                 s_hosts.count, c ? c->name : "(无)");
+    }
+
+    /* 按键要 50ms 轮询，心跳每 5 秒打一次 —— 用计数分频，不另开任务。 */
+    uint32_t beat = 0, ticks = 0;
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        ESP_LOGI(TAG, "心跳 %lu | 屏 %dx%d | WiFi %s | 空闲堆 %lu",
-                 (unsigned long)++beat, TDS3_WIDTH, TDS3_HEIGHT,
-                 net_wifi_is_up() ? "已连" : "断开",
-                 (unsigned long)esp_get_free_heap_size());
+        btn_event_t e = buttons_poll();
+        if (e == BTN_LONG) {
+            do_pairing();
+        } else if (e == BTN_SHORT) {
+            hosts_cycle(&s_hosts);
+            const host_t *c = hosts_current(&s_hosts);
+            ESP_LOGI(TAG, "切换到 %s", c ? c->name : "(无)");
+        }
+
+        if (++ticks >= 100) {              /* 100 * 50ms = 5 秒 */
+            ticks = 0;
+            ESP_LOGI(TAG, "心跳 %lu | 屏 %dx%d | WiFi %s | 已配对 %d 台 | 空闲堆 %lu",
+                     (unsigned long)++beat, TDS3_WIDTH, TDS3_HEIGHT,
+                     net_wifi_is_up() ? "已连" : "断开", s_hosts.count,
+                     (unsigned long)esp_get_free_heap_size());
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }

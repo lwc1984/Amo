@@ -77,8 +77,10 @@ def overall_state(ss: list) -> str:
 def pairing_label(window, now: float | None = None) -> str:
     """配对菜单项的文字。窗口开着时显示剩余秒数。
 
-    pystray 只在展开菜单的那一刻重算这个 lambda，所以倒计时不会自己跳；
-    但你再展开一次看到的一定是当前状态。即时反馈靠点击时弹的气泡。
+    pystray 在 Windows 上只在设置 icon.menu 或显式调用 icon.update_menu() 时才
+    重新求值这个 lambda —— 展开菜单本身不会触发。所以 watch() 在配对窗口开着
+    期间每秒调一次 update_menu()，倒计时才会动；少了那一步，标签会一直停在
+    第一次渲染时的秒数上（实测确认过，不是理论推测）。
     """
     now = time.time() if now is None else now
     if window.is_open(now):
@@ -121,6 +123,7 @@ def toggle_autostart(icon, item):
 # ── 托盘状态刷新 ─────────────────────────────────────────────
 def watch(icon: pystray.Icon):
     last_waiting_ids = set()
+    was_pairing_open = False
     while True:
         try:
             ss = sessions.snapshot(metrics.current())["sessions"]
@@ -139,6 +142,21 @@ def watch(icon: pystray.Icon):
             icon.title = f"{len(ss)} 个会话 · {phrases.STATE_LABEL_SHORT.get(state, '')}"
         else:
             icon.title = phrases.TRAY_EMPTY
+
+        # 配对窗口开着时，每秒重建一次菜单，否则倒计时不会动。
+        #
+        # pystray 在 Windows 上只在设置 icon.menu 或显式调用 update_menu() 时才
+        # 重新求值菜单项的 lambda —— 光是展开菜单不会。我原先在 pairing_label 的
+        # 注释里写"再展开一次看到的一定是当前状态"，那是错的，实测倒计时一直卡在
+        # 第一次看到的秒数上。
+        # 只在窗口开着时调，以及关闭后再调一次把标签还原，避免常态下每秒重建菜单。
+        pairing_open = server.PAIRING.is_open()
+        if pairing_open or was_pairing_open:
+            try:
+                icon.update_menu()
+            except Exception:
+                pass
+        was_pairing_open = pairing_open
 
         # 按会话身份判断，不按数量 —— 一个处理完、另一个进来时数量不变，
         # 用计数比较会把第二个的提醒静默吞掉。
