@@ -71,6 +71,47 @@ static void test_waiting_outranks_stale(void) {
     CHECK_INT(v.state, VS_WAITING);
 }
 
+static void test_busy_outranks_running(void) {
+    /* 与 tray.py:overall_state、sessions._ORDER 同序：
+       等待 > 失联 > 憋大招 > 运行 > 摸鱼。
+       憋了十分钟大招比刚敲下回车信息量大，该先看见。 */
+    hosts_t h; hosts_init(&h);
+    mk_host(&h, "id0", "A");
+    tiny_t s[1] = {0};
+    s[0].running = 2;
+    s[0].busy = 1;
+    bool ok[1] = { true };
+    view_t v;
+    view_build(&h, s, ok, &v);
+    CHECK_INT(v.state, VS_BUSY);
+}
+
+static void test_stale_outranks_busy(void) {
+    hosts_t h; hosts_init(&h);
+    mk_host(&h, "id0", "A");
+    tiny_t s[1] = {0};
+    s[0].busy = 1;
+    s[0].stale = 1;
+    bool ok[1] = { true };
+    view_t v;
+    view_build(&h, s, ok, &v);
+    CHECK_INT(v.state, VS_STALE);
+}
+
+static void test_total_sessions_is_the_sum(void) {
+    /* 板子只显示一条会话，但得让人知道背后还有几条 —— 否则五个会话里
+       只看见最要紧那条，会以为就这一个。 */
+    hosts_t h; hosts_init(&h);
+    mk_host(&h, "id0", "A");
+    tiny_t s[1] = {0};
+    s[0].waiting = 1; s[0].running = 2; s[0].idle = 3;
+    s[0].stale = 1;   s[0].busy = 1;
+    bool ok[1] = { true };
+    view_t v;
+    view_build(&h, s, ok, &v);
+    CHECK_INT(v.total, 8);
+}
+
 static void test_running_when_no_waiting(void) {
     hosts_t h; hosts_init(&h);
     mk_host(&h, "id0", "A");
@@ -159,6 +200,9 @@ int main(void) {
     test_waiting_wins_on_current_host();
     test_stale_outranks_running();
     test_waiting_outranks_stale();
+    test_busy_outranks_running();
+    test_stale_outranks_busy();
+    test_total_sessions_is_the_sum();
     test_running_when_no_waiting();
     test_idle_shows_count();
     test_peek_flags_other_host_waiting();

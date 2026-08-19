@@ -21,7 +21,7 @@ def test_counts_and_host_on_first_line():
     s = [sess("waiting", "a"), sess("running", "b"), sess("running", "c"),
          sess("idle", "d"), sess("stale", "e")]
     line1 = tiny.render_tiny(make_snap(s)).split("\n")[0]
-    assert line1 == "2|1,2,1,1|WORKSTATION"
+    assert line1 == "3|1,2,1,1,0|WORKSTATION"
 
 
 def test_stale_is_counted_separately():
@@ -31,17 +31,27 @@ def test_stale_is_counted_separately():
     第四种状态必须在协议里有自己的位置，不能靠推断。
     """
     line1 = tiny.render_tiny(make_snap([sess("stale", "失联了")])).split(chr(10))[0]
-    assert line1 == "2|0,0,0,1|WORKSTATION"
+    assert line1 == "3|0,0,0,1,0|WORKSTATION"
 
 
-def test_version_is_two():
-    """加了 stale 计数，老固件按三个数解析会读错，所以必须升版本号。
+def test_busy_is_counted_separately():
+    """busy 混进 running 的话，板子分不出「干着呢」和「憋大招」。
+
+    颜色上两者相同（都不需要你走过去），但文字和嘴型要分开 ——
+    走近看时你需要知道它是刚开始还是已经憋了十分钟。
+    """
+    line1 = tiny.render_tiny(make_snap([sess("busy", "在跑大构建")])).split(chr(10))[0]
+    assert line1 == "3|0,0,0,0,1|WORKSTATION"
+
+
+def test_version_is_three():
+    """每加一个计数位都要升版本号，老固件按旧位数解析会读错。
 
     tiny_parse 对不认识的版本整体拒绝而不是猜 —— 宁可显示「连不上」，
     也不要显示一个错的状态。
     """
-    assert tiny.TINY_VERSION == 2
-    assert tiny.render_tiny(make_snap([])).split("|")[0] == "2"
+    assert tiny.TINY_VERSION == 3
+    assert tiny.render_tiny(make_snap([])).split("|")[0] == "3"
 
 
 def test_top_session_is_the_first_one():

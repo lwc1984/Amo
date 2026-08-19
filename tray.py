@@ -20,8 +20,11 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 APP_NAME = "AgentDashboard"
 
 # 与平板 / ESP32 完全相同的语义色
+# busy 与 running 同色。颜色要回答的是"要不要走过去"，而「憋大招」和「干着呢」
+# 的答案是同一个：不用管它。第五种颜色只会让托盘那个小圆点更难辨认。
 COLORS = {"waiting": (255, 176, 32), "running": (63, 191, 216),
-          "idle": (74, 91, 120), "stale": (226, 86, 74), "off": (60, 66, 78)}
+          "busy": (63, 191, 216), "idle": (74, 91, 120),
+          "stale": (226, 86, 74), "off": (60, 66, 78)}
 
 
 # ── 单实例：拿不到端口就说明已在运行 ────────────────────────
@@ -64,11 +67,17 @@ def tablet_url(ip: str, port: int, token: str) -> str:
 
 
 def overall_state(ss: list) -> str:
-    """整盘状态：等待 > 失联 > 运行 > 空闲 > 无。"""
+    """整盘状态：等待 > 失联 > 憋大招 > 运行 > 空闲 > 无。
+
+    与 sessions._ORDER 同序。两处若不一致，同一台机器上托盘和列表会对
+    "最该看哪条"给出不同答案。
+    """
     if any(s["state"] == "waiting" for s in ss):
         return "waiting"
     if any(s["state"] == "stale" for s in ss):
         return "stale"
+    if any(s["state"] == "busy" for s in ss):
+        return "busy"
     if any(s["state"] == "running" for s in ss):
         return "running"
     return "idle" if ss else "off"

@@ -70,6 +70,9 @@ button.armed{color:var(--run); border-color:var(--run)}
 .s .path{font-size:13px; color:#4A5670; margin-top:4px}
 
 .s.running{border-left-color:var(--run)}   .s.running .tag{color:var(--run)}
+/* busy 沿用 run 色。颜色要回答的是"要不要走过去"，而「憋大招」和「干着呢」
+   的答案是同一个：不用管它。硬给第五种颜色反而会让 2 米外那道信号变模糊。 */
+.s.busy   {border-left-color:var(--run)}   .s.busy .tag{color:var(--run)}
 .s.idle   {border-left-color:var(--idle)}  .s.idle .tag{color:var(--dim)}
 .s.stale  {border-left-color:var(--stale)} .s.stale .tag{color:var(--stale)}
 .s.waiting{
@@ -252,6 +255,7 @@ function renderMetrics(m) {
 const LABEL = {
   running: '干着呢，别催',
   waiting: '哥们儿，该你了',
+  busy:    '憋大招呢，稍等',
   idle:    '摸鱼中，等你发话',
   stale:   '没声儿了，人呢？',
 };

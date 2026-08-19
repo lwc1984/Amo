@@ -116,17 +116,38 @@ def test_tail_summary_missing_file_is_empty():
     assert sessions.tail_summary(None) == ""
 
 
-def test_running_goes_stale_after_timeout():
+def test_running_goes_busy_after_quiet_timeout():
+    """安静一会儿不等于出事 —— 长时间构建就是最正常不过的事。
+
+    PostToolUse 要等命令结束才触发，所以一次十分钟的构建期间，会话看起来
+    和卡死一模一样。把这段时间标成「憋大招」而不是「没声儿了」，
+    是为了让真正的失联仍然值得警觉。
+    """
     ev("prompt", now=1000.0)
-    snap = sessions.snapshot({}, now=1000.0 + sessions.IDLE_TIMEOUT + 1)
+    snap = sessions.snapshot({}, now=1000.0 + sessions.QUIET_TIMEOUT + 1)
+    assert snap["sessions"][0]["state"] == "busy"
+
+
+def test_running_goes_stale_only_after_a_long_silence():
+    ev("prompt", now=1000.0)
+    snap = sessions.snapshot({}, now=1000.0 + sessions.STALE_TIMEOUT + 1)
     assert snap["sessions"][0]["state"] == "stale"
 
 
-def test_idle_does_not_go_stale():
-    """只有 running 会失联；空闲本来就没事件。"""
+def test_busy_window_is_generous_enough_for_a_real_build():
+    """阈值不是随手定的：十分钟的构建不该被判成失联。"""
+    assert sessions.STALE_TIMEOUT >= 600
+    assert sessions.QUIET_TIMEOUT < sessions.STALE_TIMEOUT
+
+
+def test_idle_does_not_go_busy():
+    """只有 running 会进入这两态；空闲本来就没事件。"""
     ev("session-start", now=1000.0)
-    snap = sessions.snapshot({}, now=1000.0 + sessions.IDLE_TIMEOUT + 1)
+    snap = sessions.snapshot({}, now=1000.0 + sessions.STALE_TIMEOUT + 1)
     assert snap["sessions"][0]["state"] == "idle"
+
+
+
 
 
 def test_snapshot_sorts_waiting_first():

@@ -126,22 +126,25 @@ void app_main(void)
        idle 与 nolink 在真实环境里很难凑出来 —— 只要你还在敲代码就不会有 idle，
        而 nolink 要等真断网。它们同样需要被看过一眼。 */
     {
-        static const char *NAMES[] = {"", "恐龙公园初始化", "amo-display",
-                                      "机械时代本地化", "星光护卫队"};
-        static const char *DETAILS[] = {"", "干完了", "Bash: npm run build",
-                                        "要不要把这个目录删掉？", "Read"};
-        static const view_state_t ORDER[] = {VS_RUNNING, VS_WAITING, VS_IDLE,
-                                             VS_STALE, VS_NOLINK};
+        static const char *NAMES[] = {"amo-display", "机械时代本地化",
+                                      "恐龙公园初始化", "星光护卫队",
+                                      "playback-core", ""};
+        static const char *DETAILS[] = {"Read", "Bash: idf.py build",
+                                        "要不要把这个目录删掉？", "干完了",
+                                        "Bash: npm test", ""};
+        static const view_state_t ORDER[] = {VS_RUNNING, VS_BUSY, VS_WAITING,
+                                             VS_IDLE, VS_STALE, VS_NOLINK};
         for (int round = 0; round < 3; round++) {
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 6; i++) {
                 view_t d = {0};
                 d.state = ORDER[i];
                 snprintf(d.host, sizeof(d.host), "USER-20220210RC");
                 snprintf(d.name, sizeof(d.name), "%s", NAMES[i]);
                 snprintf(d.detail, sizeof(d.detail), "%s", DETAILS[i]);
                 d.cpu = 42; d.mem = 55; d.gpu = -1; d.net_kb = 7;
+                d.total = 3;
                 ui_render(&d);
-                ESP_LOGW(TAG, "演示：第 %d 种状态", i + 1);
+                ESP_LOGW(TAG, "演示：第 %d/6 种状态", i + 1);
                 vTaskDelay(pdMS_TO_TICKS(2500));
 #ifdef CONFIG_AGENT_DUMP_FRAME_ON_BOOT
                 if (round == 0) {
@@ -197,7 +200,7 @@ void app_main(void)
         if (ticks >= 60) {                 /* 3 秒：日志 */
             ticks = 0;
             if (have_view) {
-                static const char *SN[] = {"连不上", "摸鱼中", "干着呢", "该你了", "没声儿了"};
+                static const char *SN[] = {"连不上", "摸鱼中", "干着呢", "憋大招", "该你了", "没声儿了"};
                 ESP_LOGI(TAG, "[%lu] %s | %s | %s | %s | cpu%d mem%d gpu%d net%d%s%s | 堆 %lu",
                          (unsigned long)++beat, SN[v.state], v.host,
                          v.name[0] ? v.name : "(无会话)",

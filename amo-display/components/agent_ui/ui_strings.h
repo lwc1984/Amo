@@ -4,6 +4,7 @@
    改这里必须同步改 phrases.py，tests/test_firmware_copy.py 会挡住漂移。 */
 #define UI_S_WAITING  "该你了"
 #define UI_S_RUNNING  "干着呢"
+#define UI_S_BUSY     "憋大招"
 #define UI_S_IDLE     "摸鱼中"
 #define UI_S_STALE    "没声儿了"
 

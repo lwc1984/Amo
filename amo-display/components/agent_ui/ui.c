@@ -79,6 +79,7 @@ static lv_obj_t *s_state;
 static lv_obj_t *s_name;
 static lv_obj_t *s_detail;
 static lv_obj_t *s_peek;
+static lv_obj_t *s_count;
 
 static int s_last_state = -1;
 
@@ -96,6 +97,9 @@ static lv_color_t color_of(view_state_t st)
     switch (st) {
     case VS_WAITING: return C_WAIT;
     case VS_RUNNING: return C_RUN;
+    /* busy 与 running 同色。颜色要回答的是"要不要走过去"，两者答案相同：
+       不用管它。给它第五种颜色只会让 2 米外那道信号变模糊。 */
+    case VS_BUSY:    return C_RUN;
     case VS_STALE:   return C_STALE;
     case VS_IDLE:    return C_IDLE;
     default:         return C_NOLINK;
@@ -107,6 +111,7 @@ static const char *label_of(view_state_t st)
     switch (st) {
     case VS_WAITING: return UI_S_WAITING;
     case VS_RUNNING: return UI_S_RUNNING;
+    case VS_BUSY:    return UI_S_BUSY;
     case VS_STALE:   return UI_S_STALE;
     case VS_IDLE:    return UI_S_IDLE;
     default:         return UI_S_NOLINK;
@@ -210,6 +215,18 @@ void ui_init(void)
     s_name   = make_label(scr, &lv_font_cjk_16, lv_color_white());
     s_detail = make_label(scr, &lv_font_cjk_16, lv_color_hex(0x8899AA));
 
+    /* 会话总数。板子只显示一条会话（宿主端按状态优先级挑出来的那条），
+       但五个会话里只看见最要紧那条，会让人以为就这一个。
+       放在状态词那一行的右端：状态词居中，右侧本来就是空的；
+       原先放右下角会被下排牙齿压住，牙齿越长压得越多。 */
+    s_count = lv_label_create(scr);
+    lv_obj_set_style_text_font(s_count, &lv_font_cjk_16, 0);
+    lv_obj_set_style_text_color(s_count, lv_color_hex(0x5A6880), 0);
+    lv_obj_set_style_text_align(s_count, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_width(s_count, 84);
+    lv_obj_set_x(s_count, W - 92);
+    lv_label_set_text(s_count, "");
+
     /* 偷看标记：盯着这台时别台有人在等，也要能看见。左下角，不抢中央。 */
     s_peek = lv_label_create(scr);
     lv_obj_set_style_text_font(s_peek, &lv_font_cjk_16, 0);
@@ -226,10 +243,12 @@ static void layout_for(view_state_t st)
 {
     if (is_closed_mouth(st)) {
         lv_obj_set_y(s_state, 18);
+        lv_obj_set_y(s_count, 26);
         lv_obj_set_y(s_name, 126);
         lv_obj_add_flag(s_detail, LV_OBJ_FLAG_HIDDEN);   /* 闭着嘴，没什么在说 */
     } else {
         lv_obj_set_y(s_state, 40);
+        lv_obj_set_y(s_count, 48);
         lv_obj_set_y(s_name, 80);
         lv_obj_set_y(s_detail, 102);
         lv_obj_clear_flag(s_detail, LV_OBJ_FLAG_HIDDEN);
@@ -277,6 +296,16 @@ static void animate_for(view_state_t st)
         lv_anim_set_values(&a, 24, 36);
         lv_anim_set_time(&a, 380);
         lv_anim_set_playback_time(&a, 380);
+        lv_anim_start(&a);
+        break;
+
+    case VS_BUSY:
+        /* 慢而深的咀嚼。颜色和 running 一样，靠节奏区分 ——
+           一口咬得久，像在啃硬东西。1.1 秒一开合，是 running 的三倍。 */
+        lv_anim_set_exec_cb(&a, set_open);
+        lv_anim_set_values(&a, 20, 40);
+        lv_anim_set_time(&a, 1100);
+        lv_anim_set_playback_time(&a, 1100);
         lv_anim_start(&a);
         break;
 
@@ -350,7 +379,17 @@ void ui_render(const view_t *v)
         lv_label_set_text(s_name, "");
         lv_label_set_text(s_detail, "");
         lv_label_set_text(s_peek, "");
+        lv_label_set_text(s_count, "");
         return;
+    }
+
+    /* 只有一条会话时不显示计数 —— 「1 个会话」是废话，占地方还分散注意力。 */
+    if (v->total > 1) {
+        char cnt[24];
+        snprintf(cnt, sizeof(cnt), "%d 个会话", v->total);
+        lv_label_set_text(s_count, cnt);
+    } else {
+        lv_label_set_text(s_count, "");
     }
 
     lv_label_set_text(s_name, v->name[0] ? v->name : UI_S_NOHOST);

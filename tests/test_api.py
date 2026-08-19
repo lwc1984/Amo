@@ -78,7 +78,7 @@ def test_hook_then_tiny_reflects_state(client, tok):
     body = client.get(f"/api/tiny?k={tok}").text
     line1, line2, _ = body.split("\n")
 
-    assert line1.startswith("2|1,0,0,0|")
+    assert line1.startswith("3|1,0,0,0,0|")
     assert line2.startswith("Amo\t")
 
 
@@ -212,4 +212,4 @@ def test_hook_kind_query_sets_notification_type(client, tok):
     hook(client, "session-start", cwd="D:/proj/Amo")
     client.post("/hook/notify?kind=permission",
                 json={"session_id": "s1", "cwd": "D:/proj/Amo", "message": "OK"})
-    assert client.get(f"/api/tiny?k={tok}").text.split("\n")[0].startswith("2|1,0,0,0|")
+    assert client.get(f"/api/tiny?k={tok}").text.split("\n")[0].startswith("3|1,0,0,0,0|")

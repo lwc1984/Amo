@@ -4,7 +4,7 @@
 以后加字段不至于把已烧录的固件打死 —— v2 加 stale 计数时正是靠它：
 老固件按三个数解析会读错，见到 2 就整体拒绝，显示「连不上」而不是错的状态。
 
-第一行格式：`版本|waiting,running,idle,stale|主机名`
+第一行格式：`版本|waiting,running,idle,stale,busy|主机名`
 
 前置条件：`snap["sessions"]` 必须已按 waiting → running → idle → stale 排序，
 这由 `sessions.snapshot()` 保证。本模块刻意不重复排序逻辑 —— 排序的唯一权威
@@ -13,7 +13,7 @@
 """
 import sessions
 
-TINY_VERSION = 2
+TINY_VERSION = 3
 
 
 def render_tiny(snap: dict, full: bool = False) -> str:
@@ -22,11 +22,13 @@ def render_tiny(snap: dict, full: bool = False) -> str:
     def n(state: str) -> int:
         return sum(1 for s in ss if s["state"] == state)
 
-    # stale 必须有自己的计数位。它不属于 waiting/running/idle 中的任何一个，
-    # 少了这一位，一个会话失联时固件只会看到 0,0,0，把「没声儿了」渲染成
-    # 「摸鱼中」—— 正是设计里「断连绝不能渲染成正常」要防的事。
-    line1 = (f"{TINY_VERSION}|{n('waiting')},{n('running')},{n('idle')},{n('stale')}"
-             f"|{snap['host']}")
+    # 五个状态各有自己的计数位。
+    #
+    # stale 少了这一位，失联会被渲染成「摸鱼中」—— 正是「断连绝不能渲染成正常」
+    # 要防的事。busy 少了这一位，一次十分钟的构建和刚敲下回车长得一样 ——
+    # 颜色上它俩确实该相同（都不用你走过去），但走近看时你需要知道是哪一种。
+    line1 = (f"{TINY_VERSION}|{n('waiting')},{n('running')},{n('idle')},"
+             f"{n('stale')},{n('busy')}|{snap['host']}")
 
     # 依赖 snapshot() 的排序：第一条天然就是最该显示的
     top = ss[0] if ss else None

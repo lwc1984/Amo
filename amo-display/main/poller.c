@@ -26,18 +26,22 @@ void view_build(const hosts_t *h, const tiny_t *samples, const bool *ok, view_t 
     snprintf(out->name, sizeof(out->name), "%s", s->name);
     snprintf(out->detail, sizeof(out->detail), "%s", s->detail);
     out->idle_count = s->idle;
+    out->total = s->waiting + s->running + s->idle + s->stale + s->busy;
     out->cpu = s->cpu;
     out->mem = s->mem;
     out->gpu = s->gpu;
     out->net_kb = s->net_kb;
 
-    /* 优先级抄自 tray.py:overall_state：等待 > 失联 > 运行 > 空闲。
-       stale 排在 running 之前是有意的 —— 会话失联说明出了问题，
-       比一个正常跑着的更该被看见。 */
+    /* 优先级与 tray.py:overall_state、sessions._ORDER 同序：
+       等待 > 失联 > 憋大招 > 运行 > 摸鱼。
+       stale 排在 running 之前是有意的 —— 失联说明出了问题，比正常跑着的更该
+       被看见。busy 排在 running 之前同理：憋了十分钟大招比刚敲下回车信息量大。 */
     if (s->waiting > 0) {
         out->state = VS_WAITING;
     } else if (s->stale > 0) {
         out->state = VS_STALE;
+    } else if (s->busy > 0) {
+        out->state = VS_BUSY;
     } else if (s->running > 0) {
         out->state = VS_RUNNING;
     } else {

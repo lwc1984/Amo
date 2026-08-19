@@ -7,6 +7,9 @@
 STATE_LABEL = {
     "waiting": "哥们儿，该你了",
     "running": "干着呢，别催",
+    # 安静超过 QUIET_TIMEOUT 但还没到 STALE_TIMEOUT。多半是在跑一次长构建 ——
+    # PostToolUse 要等命令结束才触发，那段时间它看起来和卡死一样。
+    "busy": "憋大招呢，稍等",
     "idle": "摸鱼中，等你发话",
     "stale": "没声儿了，人呢？",
 }
@@ -15,6 +18,7 @@ STATE_LABEL = {
 STATE_LABEL_SHORT = {
     "waiting": "该你了",
     "running": "干着呢",
+    "busy": "憋大招",
     "idle": "摸鱼中",
     "stale": "没声儿了",
 }

@@ -12,12 +12,44 @@ import phrases
 
 HEADER = Path(__file__).resolve().parent.parent / "amo-display" / "components" / "agent_ui" / "ui_strings.h"
 
-MAPPING = {
-    "UI_S_WAITING": "waiting",
-    "UI_S_RUNNING": "running",
-    "UI_S_IDLE": "idle",
-    "UI_S_STALE": "stale",
-}
+# 从 phrases 反推，不手写。
+#
+# 原先这里是一张固定表，加新状态时不会自动纳入 —— 守卫看起来在守、实际漏了，
+# 这是防漂移测试最危险的失效形态：它给你一种"已经有人在盯着"的错觉。
+# busy 加进来时正是这样溜过去的。
+MAPPING = {"UI_S_" + state.upper(): state for state in phrases.STATE_LABEL_SHORT}
+
+
+def test_mapping_covers_every_state():
+    """守卫自身的守卫：phrases 里每个状态都必须在这张表里有对应的宏。
+
+    表是推导出来的，这条断言防的是有人把它改回手写。
+    """
+    assert set(MAPPING.values()) == set(phrases.STATE_LABEL_SHORT)
+    assert len(MAPPING) >= 5
+
+
+GEN_FONTS = Path(__file__).resolve().parent.parent / "amo-display" / "tools" / "gen_fonts.ps1"
+
+
+def test_status_font_covers_every_ui_string():
+    """28px 字库的字符表必须覆盖 ui_strings.h 里所有 UI_S_* 用到的字。
+
+    漏了不会报错，只会在屏幕上显示缺字方框 —— 而所有测试照常通过。
+    加「憋大招」时正是这样漏的：状态、文案、解析、视图全改对了，
+    唯独没重新生成字库，只有拿真机抓帧才看得见。
+    """
+    gen = GEN_FONTS.read_text(encoding="utf-8")
+    m = re.search(r'\$statusChars\s*=\s*"([^"]*)"', gen)
+    assert m, "gen_fonts.ps1 里找不到 $statusChars"
+    charset = set(m.group(1))
+
+    needed = {c for word in _defines(HEADER.read_text(encoding="utf-8")).values()
+              for c in word}
+    missing = sorted(needed - charset)
+    assert not missing, (
+        f"这些字在 ui_strings.h 里用到，但 28px 字库的字符表里没有: {missing}。"
+        f"改完 $statusChars 要重跑 amo-display/tools/gen_fonts.ps1")
 
 
 def _strip_inactive(text: str) -> str:

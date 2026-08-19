@@ -13,11 +13,26 @@ from pathlib import Path
 import phrases
 
 HOST = socket.gethostname()
-IDLE_TIMEOUT = 90
+
+# 一个 running 会话安静多久算什么。
+#
+# 只用一个阈值是不够的：PostToolUse 要等命令结束才触发，所以一次十分钟的构建
+# 期间，会话看起来和卡死一模一样。把两者混为一谈的代价是双向的 —— 要么频繁
+# 误报失联（然后你学会无视它），要么把阈值调高到真失联时也不吭声。
+#
+# 分成两段：安静超过 QUIET 是「憋大招」（在干重活，不用管），
+# 超过 STALE 才是「没声儿了」（该去看看了）。
+QUIET_TIMEOUT = 90
+STALE_TIMEOUT = 600
+
+# 兼容旧名字。曾经只有这一个阈值，含义相当于现在的 QUIET_TIMEOUT。
+IDLE_TIMEOUT = QUIET_TIMEOUT
 ARG_MAX = 60          # detail 里工具参数的显示上限，超出截断
 SESSIONS: dict[str, dict] = {}
 
-_ORDER = {"waiting": 0, "running": 1, "idle": 2, "stale": 3}
+# 排序权威。busy 排在 running 之前：它更少见、也更值得先看一眼
+# ——「憋了十分钟大招」比「刚敲下回车」信息量大。
+_ORDER = {"waiting": 0, "stale": 1, "busy": 2, "running": 3, "idle": 4}
 
 
 def key(session_id: str) -> str:
@@ -120,8 +135,13 @@ def snapshot(metrics: dict, now: float | None = None) -> dict:
     out = []
     for s in list(SESSIONS.values()):
         last = s.get("last_event", now)
-        stale = now - last > IDLE_TIMEOUT
-        state = "stale" if (stale and s.get("state") == "running") else s.get("state", "idle")
+        quiet = now - last
+        state = s.get("state", "idle")
+        if state == "running":
+            if quiet > STALE_TIMEOUT:
+                state = "stale"
+            elif quiet > QUIET_TIMEOUT:
+                state = "busy"
         out.append({**s, "state": state,
                     "detail": detail(s, full=True),
                     "age": round(now - last)})
