@@ -1,0 +1,24 @@
+menu "Agent Display"
+
+config AGENT_WIFI_SSID
+    string "WiFi SSID"
+    default "your-ssid"
+
+config AGENT_WIFI_PASSWORD
+    string "WiFi 密码"
+    default "your-pass"
+
+config AGENT_BUZZER_GPIO
+    int "外接无源蜂鸣器 GPIO（-1 关闭）"
+    default -1
+    help
+        本板没有板载蜂鸣器。要加就接一个空闲脚，建议 GPIO17。
+        绝对不要用 GPIO2 —— 那是本板的 I2C SCL，会打死 PMU 和触摸。
+
+config AGENT_TINY_FULL_DETAIL
+    bool "请求完整命令参数（?d=full）"
+    default n
+    help
+        默认只取工具名。桌面小屏是公开展示的，别人走过就能看见。
+
+endmenu

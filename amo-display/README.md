@@ -16,6 +16,20 @@ IDF 组件管理器缓存固定在 `%LOCALAPPDATA%\Espressif\ComponentManager`�
 `idf.py --version` 打印的是 `v1.0.3` —— 那是 idf.py 工具自身的版本，不是 IDF 版本。
 要确认 IDF 版本用 `git -C $env:IDF_PATH describe --tags`。
 
+## `sdkconfig.defaults` 与 `partitions.csv` 必须是纯 ASCII
+
+这两个文件由 IDF 的 Python 工具（`kconfgen`、`gen_esp32part.py`）读取，而它们
+用的是**系统 locale 编码**打开文件 —— 中文 Windows 上就是 GBK。往里写 UTF-8
+中文注释会让构建在 configure 阶段直接炸：
+
+```
+UnicodeDecodeError: 'gbk' codec can't decode byte 0xb9 in position 10
+CMake Error at .../kconfig.cmake:209 (message): Failed to run kconfgen
+```
+
+报错完全不提"你的注释是中文"，很容易被当成 IDF 装坏了。所以这两个文件里的注释
+写英文，项目其余部分照旧用中文。
+
 ## 主机侧测试台
 
 `host_test/` 里的纯逻辑测试不依赖 IDF，用主机 gcc 编译成可执行文件直接跑：

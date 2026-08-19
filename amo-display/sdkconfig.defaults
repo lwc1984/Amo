@@ -1,0 +1,34 @@
+# NOTE: keep this file ASCII-only. IDF's kconfgen opens it with the locale
+# default encoding (GBK on a Chinese Windows), so UTF-8 Chinese comments here
+# abort the build with UnicodeDecodeError. See README.
+#
+# Board: LilyGo T-Display S3 -- ESP32-S3R8, ST7789 LCD 170x320 over an 8-bit
+# i80 bus, no PMU. The display driver is IDF's built-in esp_lcd, so there is no
+# vendored board code to configure here.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_IDF_TARGET_ESP32S3=y
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_TYPE_AUTO=y
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=240
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+# The CJK font needs flash; the default 1MB app partition is not enough.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_LV_COLOR_DEPTH_16=y
+# LV_COLOR_16_SWAP is deliberately OFF.
+#
+# ESP32 is little-endian; ST7789 reads RGB565 big-endian. We handle that once,
+# in the i80 panel-io config (.flags.swap_color_bytes = 1), so plain uint16_t
+# colours in our framebuffer come out right. If LV_COLOR_16_SWAP were also on,
+# LVGL would pre-swap and the two would cancel -- red shows as blue, green as
+# red, while white and black stay correct and hide the problem. Turn exactly
+# one of them on, never both.
+CONFIG_LV_COLOR_16_SWAP=n
+CONFIG_LV_MEM_SIZE_KILOBYTES=48
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_DEFAULT_MONTSERRAT_14=y
+CONFIG_MDNS_MAX_SERVICES=10
