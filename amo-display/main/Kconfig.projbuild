@@ -1,0 +1,29 @@
+# 必须放在组件目录（这里是 main/）。IDF 只从各组件收集 Kconfig.projbuild，
+# 不扫工程根目录 —— 放错地方的症状是编译期报 CONFIG_XXX undeclared，
+# 而 menuconfig 里也根本看不到这个菜单。
+
+menu "Agent Display"
+
+config AGENT_WIFI_SSID
+    string "WiFi SSID"
+    default "your-ssid"
+
+config AGENT_WIFI_PASSWORD
+    string "WiFi 密码"
+    default "your-pass"
+
+config AGENT_BUZZER_GPIO
+    int "外接无源蜂鸣器 GPIO（-1 关闭）"
+    default -1
+    help
+        本板（T-Display S3）没有板载蜂鸣器。要加就接一个空闲脚。
+        注意 39-48 几乎都被 LCD 并口数据线占了，可用的空闲脚不多，
+        GPIO16/17/18 是候选。接之前先对照 spec 5.1 的引脚表确认没冲突。
+
+config AGENT_TINY_FULL_DETAIL
+    bool "请求完整命令参数（?d=full）"
+    default n
+    help
+        默认只取工具名。桌面小屏是公开展示的，别人走过就能看见。
+
+endmenu

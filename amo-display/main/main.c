@@ -15,6 +15,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "mdns.h"
+
+#include "discovery.h"
+#include "hosts.h"
+#include "net_wifi.h"
 #include "tds3_board.h"
 
 static const char *TAG = "amo";
@@ -106,11 +111,29 @@ void app_main(void)
     tds3_backlight(true);          /* 画完再开背光，避免上电闪白 */
     ESP_LOGI(TAG, "四条状态色带已画：run 青蓝 / wait 琥珀 / idle 深蓝灰 / stale 砖红");
 
+    /* 屏幕先亮起来再连网 —— 连不上时至少能看见东西，而不是一块黑板。 */
+    ESP_ERROR_CHECK(mdns_init());
+    if (net_wifi_start() == ESP_OK) {
+        ESP_LOGI(TAG, "WiFi 已连接，开始 mDNS 发现");
+        host_t found[HOSTS_MAX];
+        int n = discovery_scan(found, HOSTS_MAX, 3000);
+        for (int i = 0; i < n; i++) {
+            ESP_LOGI(TAG, "发现 %s (%s) @ %s:%d",
+                     found[i].name, found[i].host_id, found[i].ip, found[i].port);
+        }
+        if (n == 0) {
+            ESP_LOGW(TAG, "一台都没发现。确认宿主端在跑，且板子与它同一子网。");
+        }
+    } else {
+        ESP_LOGE(TAG, "WiFi 连不上。menuconfig -> Agent Display 里填 SSID 与密码。");
+    }
+
     uint32_t beat = 0;
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(5000));
-        ESP_LOGI(TAG, "心跳 %lu | 屏 %dx%d | 空闲堆 %lu",
+        ESP_LOGI(TAG, "心跳 %lu | 屏 %dx%d | WiFi %s | 空闲堆 %lu",
                  (unsigned long)++beat, TDS3_WIDTH, TDS3_HEIGHT,
+                 net_wifi_is_up() ? "已连" : "断开",
                  (unsigned long)esp_get_free_heap_size());
     }
 }
