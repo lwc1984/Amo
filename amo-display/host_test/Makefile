@@ -5,10 +5,14 @@ CC = gcc
 endif
 CFLAGS = -std=c11 -Wall -Wextra -Werror -g
 
-all: test_tiny_parse
+all: test_tiny_parse test_hosts
 	./test_tiny_parse
+	./test_hosts
 
 test_tiny_parse: test_tiny_parse.c ../main/tiny_parse.c
+	$(CC) $(CFLAGS) -o $@ $^
+
+test_hosts: test_hosts.c ../main/hosts.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
