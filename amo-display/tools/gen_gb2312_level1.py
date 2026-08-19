@@ -1,4 +1,7 @@
-"""生成 gb2312_level1.txt —— GB2312-1980 一级汉字表（区 16-55，按拼音排列，3755 字）。
+"""生成 gb2312_level1.txt —— GB2312 一级汉字 + 全角标点。
+
+区 16-55 是一级汉字（按拼音排列，3755 字），区 01/03 是全角标点与全角字母数字。
+文件名沿用 level1 是历史原因，实际内容比一级汉字多一段标点。
 
 GB2312-1980 是一个 94x94 的区位编码表：区（行）01-09 是符号，16-55 是一级汉字
 （常用字，按拼音排序），56-87 是二级汉字（次常用字，按部首/笔画排序）。
@@ -20,9 +23,9 @@ import os
 OUT_PATH = os.path.join(os.path.dirname(__file__), "gb2312_level1.txt")
 
 
-def gb2312_level1_chars():
+def rows_to_chars(rows):
     chars = []
-    for row in range(16, 56):  # 一级汉字：区 16-55
+    for row in rows:
         for col in range(1, 95):  # 位 1-94
             b1 = 0xA0 + row
             b2 = 0xA0 + col
@@ -34,13 +37,33 @@ def gb2312_level1_chars():
     return chars
 
 
+def gb2312_level1_chars():
+    return rows_to_chars(range(16, 56))          # 一级汉字：区 16-55
+
+
+def punctuation_chars():
+    """区 01 与区 03：全角标点与全角字母数字。
+
+    最初只取了一级汉字，结果实测在屏幕上看到「要不要把这个目录删掉□」——
+    句末的「？」是缺字方框。中文句子里到处是 ，。？！：「」——，缺了它们
+    每一句都会长出方框，而这些字符只有区 01 才有。
+
+    区 02（序号）、04/05（日文假名）、06/07（希腊西里尔）、08（拼音注音）、
+    09（制表符）不收 —— 这个项目用不到，而每个字形都要占 flash。
+    """
+    return rows_to_chars([1, 3])
+
+
 def main():
     chars = gb2312_level1_chars()
     assert len(chars) == 3755, f"expected 3755 level-1 chars, got {len(chars)}"
+    puncts = punctuation_chars()
+    chars = puncts + chars
     with io.open(OUT_PATH, "w", encoding="utf-8", newline="\n") as f:
         for c in chars:
             f.write(c + "\n")
-    print(f"wrote {len(chars)} chars to {OUT_PATH}")
+    print(f"wrote {len(chars)} chars to {OUT_PATH}"
+          f"  ({len(puncts)} 标点/全角 + 3755 一级汉字)")
 
 
 if __name__ == "__main__":

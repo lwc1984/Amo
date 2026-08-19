@@ -26,4 +26,13 @@ config AGENT_TINY_FULL_DETAIL
     help
         默认只取工具名。桌面小屏是公开展示的，别人走过就能看见。
 
+config AGENT_DUMP_FRAME_ON_BOOT
+    bool "开机后 dump 一帧屏幕内容到串口"
+    default n
+    help
+        把 LVGL 画好的整屏以 base64 的 RGB565 吐到串口，主机侧可还原成 PNG。
+        开发时人看不到屏幕（远程、或板子不在手边）就靠它验证排版 ——
+        "UI 长什么样"因此从只能靠肉眼的问题变成可自动检查的问题。
+        正常固件不需要，默认关闭：一帧约 145KB base64，会把串口刷屏十几秒。
+
 endmenu

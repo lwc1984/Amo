@@ -34,5 +34,18 @@ esp_lcd_panel_handle_t tds3_panel(void);
  * 屏幕上会出现串色和整行错位，而且时好时坏。 */
 esp_err_t tds3_blit(int x0, int y0, int x1, int y1, const void *px);
 
-/* 背光开关。本板背光是纯 GPIO 开关，没有硬件调光。 */
-void tds3_backlight(bool on);
+/* 背光。0-100 的占空比，走 LEDC PWM。
+   LCD 背光是全屏均匀的，画成黑色一分电都不省 —— 省电只能靠调这个，
+   这是相对 AMOLED 方案的实质差别，不是换个数字的事。 */
+void tds3_backlight(int percent);
+
+/* 把 LVGL 接到这块屏上：建绘制缓冲、注册显示驱动、起 tick 与 handler 任务。
+   调用之后不要再用 tds3_blit —— 刷屏由 LVGL 接管，两条路径抢同一个 DMA。 */
+esp_err_t tds3_lvgl_start(void);
+
+/* 把当前屏幕内容以 base64 的 RGB565 吐到串口，供主机侧还原成图片。
+ *
+ * 存在的理由很实际：开发时人不在板子旁边，或者根本看不到屏幕，就没法验证
+ * 排版。有了它，"UI 长什么样"从一个只能靠肉眼的问题变成可自动检查的问题。
+ * 影子缓冲放 PSRAM，不占 DMA 可达的内部 RAM，也不改渲染路径。 */
+void tds3_dump_frame(void);

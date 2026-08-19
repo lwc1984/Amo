@@ -3,7 +3,8 @@
 ifeq ($(origin CC),default)
 CC = gcc
 endif
-CFLAGS = -std=c11 -Wall -Wextra -Werror -g
+# -I 指向 agent_ui：view.h 在那里（显示模型属于消费方）
+CFLAGS = -std=c11 -Wall -Wextra -Werror -g -I../components/agent_ui
 
 all: test_tiny_parse test_hosts test_view
 	./test_tiny_parse

@@ -1,3 +1,8 @@
+# WARNING: sdkconfig.defaults only applies to fields MISSING from sdkconfig.
+# Editing a value here does nothing once sdkconfig exists -- you must edit
+# sdkconfig itself (or delete it and reconfigure). This bit us on
+# LV_COLOR_16_SWAP: the comment below was right, the setting never took effect.
+#
 # NOTE: keep this file ASCII-only. IDF's kconfgen opens it with the locale
 # default encoding (GBK on a Chinese Windows), so UTF-8 Chinese comments here
 # abort the build with UnicodeDecodeError. See README.
@@ -27,6 +32,11 @@ CONFIG_LV_COLOR_DEPTH_16=y
 # red, while white and black stay correct and hide the problem. Turn exactly
 # one of them on, never both.
 CONFIG_LV_COLOR_16_SWAP=n
+# lv_font_conv compresses glyph bitmaps by default (.bitmap_format = 1 in the
+# generated .c). Without this option LVGL cannot decompress them and simply
+# draws nothing -- no error, no fallback boxes, just missing text, while the
+# built-in Montserrat (uncompressed) keeps working and hides the cause.
+CONFIG_LV_USE_FONT_COMPRESSED=y
 CONFIG_LV_MEM_SIZE_KILOBYTES=48
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_28=y
