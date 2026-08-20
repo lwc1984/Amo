@@ -208,7 +208,15 @@ esp_err_t tds3_board_init(void)
     /* T-Display S3 的面板是反色接法，不翻的话所有颜色都是补色 */
     if ((err = esp_lcd_panel_invert_color(s_panel, true)) != ESP_OK) return err;
     if ((err = esp_lcd_panel_swap_xy(s_panel, true)) != ESP_OK) return err;
+    /* 方向：翻一个轴是镜像，两个轴同时翻才是 180 度旋转。
+       默认 USB 口朝左；装进外壳后若画面是倒的，menuconfig 里打开
+       「屏幕旋转 180 度」。这一项串口抓帧看不出来 —— 变换由面板的 MADCTL
+       完成，不经过 LVGL，抓到的始终是 LVGL 画的那一面。 */
+#ifdef CONFIG_AGENT_SCREEN_USB_RIGHT
+    if ((err = esp_lcd_panel_mirror(s_panel, true, false)) != ESP_OK) return err;
+#else
     if ((err = esp_lcd_panel_mirror(s_panel, false, true)) != ESP_OK) return err;
+#endif
     if ((err = esp_lcd_panel_set_gap(s_panel, 0, PANEL_GAP)) != ESP_OK) return err;
     /* 厂商初始化表必须在通用 init 与几何设置之后发 */
     for (size_t i = 0; i < sizeof(ST7789V_INIT) / sizeof(ST7789V_INIT[0]); i++) {
